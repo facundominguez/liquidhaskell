@@ -144,6 +144,7 @@ jobs:
             stack_yaml_file: "stack-8.6.5.yaml"
             liquid_runner: "stack --stack-yaml=/root/project/stack-8.6.5.yaml --silent exec -- liquid"
             extra_build_flags: "--flag liquidhaskell:include --flag liquid-platform:devel --flag liquidhaskell:no-plugin"
+            extra_test_flags: "--ta=-j4"
 
   stack_884_legacy_executable:
     docker:
@@ -153,6 +154,7 @@ jobs:
             stack_yaml_file: "stack-8.8.4.yaml"
             liquid_runner: "stack --stack-yaml=/root/project/stack-8.8.4.yaml --silent exec -- liquid"
             extra_build_flags: "--flag liquidhaskell:include --flag liquid-platform:devel --flag liquidhaskell:no-plugin"
+            extra_test_flags: "--ta=-j4"
 
   stack_810_legacy_executable:
     docker:
@@ -162,6 +164,7 @@ jobs:
             stack_yaml_file: "stack.yaml"
             liquid_runner: "stack --silent exec -- liquid"
             extra_build_flags: "--flag liquidhaskell:include --flag liquid-platform:devel --flag liquidhaskell:no-plugin"
+            extra_test_flags: "--ta=-j4"
 
   stack_810:
     docker:
@@ -169,13 +172,14 @@ jobs:
     steps:
         - stack_build_and_test:
             stack_yaml_file: "stack.yaml"
-            extra_test_flags: " liquid-platform:liquidhaskell "
+            extra_test_flags: " liquid-platform:liquidhaskell --ta=-j4 "
 
   cabal_810:
     docker:
       - image: adinapoli/ghc:8.10.2-bionic-slim
     steps:
       - cabal_build_and_test:
+          extra_test_flags: "--test-options=-j4"
           liquid_runner: "--liquid-runner=cabal -v0 v2-exec liquidhaskell -- -v0 \
                           -package-env=$(./scripts/generate_testing_ghc_env) \
                           -package=liquidhaskell -package=Cabal "
@@ -186,7 +190,7 @@ jobs:
     steps:
       - cabal_build_and_test:
           project_file: "cabal.ghc9.project"
-          extra_test_flags: ' --test-options '' -p "$0 != \"Tests.Benchmarks.text.Data/Text/Foreign.hs\" && ! /Tests.Micro.typeclass-pos./"'' '
+          extra_test_flags: ' --test-options '' -j4 -p "$0 != \"Tests.Benchmarks.text.Data/Text/Foreign.hs\" && ! /Tests.Micro.typeclass-pos./"'' '
           liquid_runner: "--liquid-runner=cabal -v0 v2-exec --project-file cabal.ghc9.project liquidhaskell -- -v0 \
                           -package-env=$(./scripts/generate_testing_ghc_env cabal.ghc9.project) \
                           -package=liquidhaskell -package=Cabal "
