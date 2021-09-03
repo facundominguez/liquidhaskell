@@ -32,7 +32,7 @@ partitionArgs args = partitionEithers (map parseArg args)
     -- Unfortunate consequence of the facts things like '-i' needs to be forwarded to GHC
     -- and not the LH executable.
     forwardToGhc :: String -> Bool
-    forwardToGhc = isPrefixOf "-i"
+    forwardToGhc a = any (`isPrefixOf` a) ["-i", "-outputdir"]
 
 
 helpNeeded :: [String] -> Bool

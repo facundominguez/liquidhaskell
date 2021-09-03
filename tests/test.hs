@@ -662,8 +662,12 @@ testCmd :: FilePath -> FilePath -> FilePath -> SmtSolver -> ExtraOptions -> Stri
 ---------------------------------------------------------------------------
 testCmd bin dir file smt (ExtraOptions (GhcSuitableOpts (LO ghcOpts)) (LiquidOnlyOpts (LO liquidOnlyOpts)))
 #ifdef USE_NEW_EXECUTABLE
-  = printf "%s -i. -i%s %s %s %s" bin dir ghcOpts liquidOpts (dir </> file)
+  = printf "%s -i. -i%s -outputdir=%s %s %s %s" bin dir outputdir ghcOpts liquidOpts (dir </> file)
   where
+    -- We put output files in a per-test folder to allow concurrent invocations.
+    -- Otherwise, the different invocations would compete to produce them
+    -- sometimes failing.
+    outputdir = dir </> file ++ "_outputdir"
     liquidOpts = ("--smtsolver=" ++ show smt) <> " " <> liquidOnlyOpts
 #else
   = printf "cd %s && %s -i . --smtsolver %s %s %s" dir bin (show smt) file (ghcOpts <> " " <> liquidOnlyOpts)
