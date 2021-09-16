@@ -36,6 +36,13 @@ extra-deps:
 resolver: lts-16.8
 compiler: ghc-8.10.2
 
+extra-include-dirs:
+- smt-switch/include
+- smt-switch/z3/include
+extra-lib-dirs:
+- smt-switch/build
+- smt-switch/build/z3
+
 nix:
   shell-file: shell-stack.nix
   path: ["nixpkgs=./nixpkgs.nix"]

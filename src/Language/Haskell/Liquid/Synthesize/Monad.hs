@@ -17,8 +17,7 @@ import           Language.Haskell.Liquid.Synthesize.GHC
                                          hiding ( SSEnv )
 import           Language.Haskell.Liquid.Synthesize.Misc
                                          hiding ( notrace )
-import qualified Language.Fixpoint.Smt.Interface
-                                               as SMT
+import qualified Language.Fixpoint.Smt.SMTLIB2 as SMT (Context)
 import           Language.Fixpoint.Types hiding ( SEnv
                                                 , SVar
                                                 , Error
@@ -89,12 +88,10 @@ locally act = do
   return r 
 
 
-evalSM :: SM a -> SMT.Context -> SSEnv -> SState -> IO a 
-evalSM act ctx env st = do 
+evalSM :: SM a -> SSEnv -> SState -> IO a 
+evalSM act env st = do 
   let st' = st {ssEnv = env}
-  r <- evalStateT act st'
-  SMT.cleanupContext ctx 
-  return r 
+  evalStateT act st'
 
 initState :: SMT.Context -> F.Config -> CGInfo -> CGEnv -> REnv -> Var -> [Var] -> SSEnv -> IO SState 
 initState ctx fcfg cgi cgenv renv xtop uniVars env = 

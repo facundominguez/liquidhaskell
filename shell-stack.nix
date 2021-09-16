@@ -9,4 +9,5 @@ haskell.lib.buildStackProject ({
   buildInputs = [ git z3 hostname ];
   ghc = ghc;
   LANG = "en_US.utf8";
+  LD_LIBRARY_PATH = ["/home/facundo/tweag/liquidhaskell/smt-switch/build"];
 })

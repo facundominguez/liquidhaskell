@@ -16,7 +16,7 @@ import           Language.Haskell.Liquid.Synthesize.GHC hiding (SSEnv)
 import           Language.Haskell.Liquid.Synthesize.Monad
 import           Language.Haskell.Liquid.Synthesize.Misc hiding (notrace)
 import           Language.Haskell.Liquid.Constraint.Fresh (trueTy)
-import qualified Language.Fixpoint.Smt.Interface as SMT
+import qualified Language.Fixpoint.Smt.SMTLIB2 as SMT (withContext)
 import           Language.Fixpoint.Types hiding (SEnv, SVar, Error)
 import qualified Language.Fixpoint.Types        as F 
 import qualified Language.Fixpoint.Types.Config as F
@@ -49,20 +49,20 @@ synthesize tgt fcfg cginfo =
           ssenv0 = symbolToVar coreProgram topLvlBndr fromREnv
           (senv1, foralls') = initSSEnv typeOfTopLvlBnd cginfo ssenv0
       
-      ctx <- SMT.makeContext fcfg tgt
-      state0 <- initState ctx fcfg cgi cge env topLvlBndr (reverse uniVars) M.empty
-      let foralls = foralls' ++ fs
-      fills <- synthesize' ctx cgi senv1 typeOfTopLvlBnd topLvlBndr typeOfTopLvlBnd foralls state0
+      SMT.withContext fcfg tgt $ \ctx -> do
+        state0 <- initState ctx fcfg cgi cge env topLvlBndr (reverse uniVars) M.empty
+        let foralls = foralls' ++ fs
+        fills <- synthesize' cgi senv1 typeOfTopLvlBnd topLvlBndr typeOfTopLvlBnd foralls state0
 
-      return $ ErrHole loc (
-        if not (null fills)
-          then text "\n Hole Fills:" $+$ pprintMany (map (coreToHs typeOfTopLvlBnd topLvlBndr . fromAnf) fills)
-          else mempty) mempty (symbol x) typeOfTopLvlBnd 
+        return $ ErrHole loc (
+          if not (null fills)
+            then text "\n Hole Fills:" $+$ pprintMany (map (coreToHs typeOfTopLvlBnd topLvlBndr . fromAnf) fills)
+            else mempty) mempty (symbol x) typeOfTopLvlBnd 
 
 
-synthesize' :: SMT.Context -> CGInfo -> SSEnv -> SpecType ->  Var -> SpecType -> [Var] -> SState -> IO [CoreExpr]
-synthesize' ctx cgi senv tx xtop ttop foralls st2
- = evalSM (go tx) ctx senv st2
+synthesize' :: CGInfo -> SSEnv -> SpecType ->  Var -> SpecType -> [Var] -> SState -> IO [CoreExpr]
+synthesize' cgi senv tx xtop ttop foralls st2
+ = evalSM (go tx) senv st2
   where 
 
     go :: SpecType -> SM [CoreExpr]
