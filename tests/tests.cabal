@@ -2273,6 +2273,7 @@ executable ple-pos
                     , Ple0
                     , PleORM
                     , Ple_sum
+                    , Permutations
                     , ReflectDefault
                     , RegexpDerivative
                     , RosePLEDiv
