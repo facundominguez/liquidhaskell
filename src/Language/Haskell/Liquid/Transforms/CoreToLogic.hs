@@ -289,13 +289,10 @@ coreToLg _ (C.Lit l)             = case mkLit l of
 coreToLg allowTC (C.Cast e c)          = do (s, t) <- coerceToLg c
                                             e'     <- coreToLg allowTC e
                                             return (ECoerc s t e')
--- elaboration reuses coretologic
--- TODO: fix this
-coreToLg True (C.Lam x e) = do p     <- coreToLg True e
+coreToLg allowTC (C.Lam x e) = do
+                               p     <- coreToLg allowTC e
                                tce   <- lsEmb <$> getState
                                return $ ELam (symbol x, typeSort tce (GM.expandVarType x)) p
-coreToLg _ e@(C.Lam _ _)        = throw ("Cannot transform lambda abstraction to Logic:\t" ++ GM.showPpr e ++
-                                            "\n\n Try using a helper function to remove the lambda.")
 coreToLg _ e                     = throw ("Cannot transform to Logic:\t" ++ GM.showPpr e)
 
 
