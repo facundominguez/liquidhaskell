@@ -14,6 +14,7 @@ infixr 5 ++
 
 {-@ lazy permutations @-}
 {-@ reflect permutations @-}
+{-@ permutations :: ts:[a] -> [[a]] / [(len ts), 1, 0] @-}
 permutations :: [a] -> [[a]]
 permutations xs0 = xs0 : perms xs0 []
 
@@ -24,7 +25,7 @@ perms
   -> is:[a]
   -> { v:[[a]]
      | v = concat (map (aux2 ts is) (fromTo 0 (len ts - 1)))
-     }
+     } / [((len ts)+(len is)), 0, (len ts)]
 @-}
 perms :: [a] -> [a] -> [[a]]
 perms []     _  = []
