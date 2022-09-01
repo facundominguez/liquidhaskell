@@ -17,6 +17,8 @@ infixr 5 ++
 {-@ permutations :: ts:[a] -> [[a]] / [(len ts), 1, 0] @-}
 permutations :: [a] -> [[a]]
 permutations xs0 = xs0 : perms xs0 []
+-- xs0 : concat [ interleave (ts!!n) (drop (n+1) xs0) xs [] | n <- [0..len xs0 - 1], xs <- permutations (reverse (take n xs0)) ]
+-- [ insertAt m (xs0!!n) xs ++ (drop (n+1) xs0) | n <- [0..len ts - 1], xs <- permutations (reverse (take n xs0)), m <- [0..len xs - 1] ]
 
 {-@
 reflect perms
@@ -40,6 +42,10 @@ perms (t0:ts0) is =
              (concat (map (aux2 (t0:ts0) is) (fromTo 1 (length (t0:ts0) - 1))))
      `const`
           mapInterleave t0 ts0 (permutations is) []
+
+-- concat [ interleave (ts!!n) (drop (n+1) ts) xs [] | n <- [0..len ts - 1], xs <- permutations (reverse (take n ts) ++ is) ]
+-- [ insertAt m (ts!!n) xs ++ (drop (n+1) ts) | n <- [0..len ts - 1], xs <- permutations (reverse (take n ts) ++ is), m <- [0..len xs - 1] ]
+
 {-
     `asTypeOf`
     const (concat (map (aux1 t0 ts0 []) (permutations is)) ++ perms ts0 (t0:is))
@@ -90,6 +96,8 @@ mapInterleave
 @-}
 mapInterleave :: a -> [a] -> [[a]] -> [[a]] -> [[a]]
 mapInterleave t ts ps r = foldr (interleave t ts) r ps `const` lemmaFoldrInterleave t ts ps r
+-- concat [ interleave t ts xs [] | xs <- ps ] ++ r
+-- [ insertAt n t xs ++ ts | xs <- ps, n <- [0..len xs - 1] ] ++ r
 
 {-@
 reflect interleave
@@ -103,6 +111,7 @@ interleave
 interleave :: a -> [a] -> [a] -> [[a]] -> [[a]]
 interleave t ts xs r =
     let (_,zs) = interleave' t ts id xs r in zs
+-- [ insertAt n t xs ++ ts | n <- [0..len xs - 1] ] ++ r
 
 {-@
 reflect interleave'
