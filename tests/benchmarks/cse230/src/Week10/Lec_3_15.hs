@@ -109,6 +109,7 @@ ex10 _ = verify p c q (\_ -> ())
     c = IWhile i (Not (Leq (V "x") (N 0)))     --   WHILE (x > 0) DO
           (IAssign "x" (Plus (V "x") (N 1)))   --     x := x + 1
     q = Equal (V "x") (N 100)                  -- { x = 100 } 
+    i :: BExp
     i = undefined -- TODO: In class
 
     -- P => I 
