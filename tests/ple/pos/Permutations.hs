@@ -129,7 +129,9 @@ interleave' :: a -> [a] -> ([a] -> [a]) -> [a] -> [[a]] -> ([a], [[a]])
 interleave' t ts _ []     r = (ts, r)
 interleave' t ts f (y:ys) r =
   let (us, zs) = interleave' t ts (snoc f y) ys r
-   in (y:us, f (t:y:us) : zs `const` (lemmaMapAux0 t f y ys ts r 0 (length ys - 1)))
+   in (y:us, f (t:y:us) : zs `const` (lemmaMapAux0 t f y ys ts 0 (length ys - 1)))
+
+-- (ys ++ ts, [ f (insertAt n t ys ++ ts) | n <- [0..len ys - 1] ] ++ r)
 
 
 ---------------------------------
@@ -441,16 +443,20 @@ lemmaMapAux0
   -> y:a
   -> ys:[a]
   -> ts:[a]
-  -> r:[[a]]
   -> { i:Int | 0 <= i }
   -> j:Int
-  -> { map (aux0 t (snoc f y) ys ts) (fromTo i j) ++ r
-         == map (aux0 t f (y:ys) ts) (fromTo (i+1) (j+1)) ++ r
+  -> { map (aux0 t (snoc f y) ys ts) (fromTo i j)
+         == map (aux0 t f (y:ys) ts) (fromTo (i+1) (j+1))
      } / [j-i+1]
 @-}
-lemmaMapAux0 :: a -> ([a] -> [a]) -> a -> [a] -> [a] -> [[a]] -> Int -> Int -> ()
-lemmaMapAux0 t f y ys ts r i j =
-    if i <= j then lemmaMapAux0 t f y ys ts r (i+1) j else ()
+lemmaMapAux0 :: a -> ([a] -> [a]) -> a -> [a] -> [a] -> Int -> Int -> ()
+lemmaMapAux0 t f y ys ts i j =
+    if i <= j then lemmaMapAux0 t f y ys ts (i+1) j else ()
+
+-- { [ f (y : insertAt n t ys ts) | n <- [i..j] ]
+--   ==
+--   [ f (insertAt n t (y:ys) ts) | n <- [i+1 .. j+1] ]
+-- }
 
 {-@ reflect snoc @-}
 snoc :: ([a] -> [a]) -> a -> [a] -> [a]
