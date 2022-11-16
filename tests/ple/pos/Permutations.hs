@@ -239,8 +239,6 @@ concat :: [[a]] -> [a]
 concat [] = []
 concat (x:xs) = x ++ concat xs
 
-{-@ type Nat = { n:Int | n >= 0 } @-}
-
 {-@
 reflect !!
 (!!) :: xs:[a] -> { n:Int | n < len xs && n >= 0 } -> a
@@ -250,7 +248,6 @@ reflect !!
 (x:xs) !! n = xs !! (n - 1)
 
 {-@ reflect take @-}
-{-@ take :: Nat -> _ -> _ @-}
 take :: Int -> [a] -> [a]
 take n xs
   | n > 0 =
@@ -261,7 +258,6 @@ take n xs
     []
 
 {-@ reflect drop @-}
-{-@ drop :: Nat -> _ -> _ @-}
 drop :: Int -> [a] -> [a]
 drop n xs
   | n > 0 =
@@ -281,30 +277,15 @@ flipAppend :: [a] -> [a] -> [a]
 flipAppend xs ys = ys ++ xs
 
 {-@ reflect insertAt @-}
-{-@
-insertAt
-  :: n:Int
-  -> y:a
-  -> xs:[a]
-  -> { v:[a] | v = take n xs ++ y : drop n xs }
-@-}
 insertAt :: Int -> a -> [a] -> [a]
-insertAt n y xs =
-  if n>0 then
-    case xs of
-      [] -> [y]
-      z:zs -> z : insertAt (n - 1) y zs
-  else
-    y : xs
+insertAt n y xs = take n xs ++ y : drop n xs
 
 {-@ reflect map @-}
-{-@ map :: forall <p :: a -> Bool, q :: b -> Bool>. (a<p> -> b<q>) -> [a<p>] -> [b<q>] @-}
 map :: (a -> b) -> [a] -> [b]
 map f [] = []
 map f (x:xs) = f x : map f xs
 
 {-@ reflect foldr @-}
-{-@ foldr :: (a -> b -> b) -> b -> [a] -> b @-}
 foldr :: (a -> b -> b) -> b -> [a] -> b
 foldr f z [] = z
 foldr f z (x:xs) = f x (foldr f z xs)
@@ -314,7 +295,7 @@ foldr f z (x:xs) = f x (foldr f z xs)
 fromTo
   :: a:Int
   -> b:Int
-  -> [Int<{\x -> a <= x && x <= b}>]
+  -> [{c:Int | a <= c && c <= b}]
      / [b-a+1]
 @-}
 fromTo :: Int -> Int -> [Int]
