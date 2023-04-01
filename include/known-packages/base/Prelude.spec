@@ -12,7 +12,8 @@ import Data.Foldable
 import Data.Maybe
 import Data.Tuple
 import GHC.Exts
-import GHC.Err 
+import Liquid.Prelude.Real
+import Liquid.Prelude.Totality
 
 
 //  GHC.Types.D# :: x:_ -> {v:_ | v = x}

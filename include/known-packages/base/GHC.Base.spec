@@ -3,7 +3,6 @@ module spec GHC.Base where
 import GHC.CString
 import GHC.Classes
 import GHC.Types
-import GHC.Tuple
 
 GHC.Base.. :: forall <p :: b -> c -> Bool, q :: a -> b -> Bool, r :: a -> c -> Bool>. 
                    {xcmp::a, wcmp::b<q xcmp> |- c<p wcmp> <: c<r xcmp>}
