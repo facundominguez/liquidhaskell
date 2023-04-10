@@ -1,5 +1,6 @@
 module spec Data.Vector where
 
+import GHC.Types
 import GHC.Base
 
 data variance Data.Vector.Vector covariant

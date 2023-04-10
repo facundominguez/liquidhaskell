@@ -1,5 +1,7 @@
 module spec Data.String where
 
+import GHC.Types
+
 measure stringlen :: a -> GHC.Types.Int
 
 Data.String.fromString

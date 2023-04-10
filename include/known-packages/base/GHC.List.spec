@@ -1,5 +1,6 @@
 module spec GHC.List where 
 
+import GHC.Types
 import GHC.Base
 
 head         :: xs:{v: [a] | len v > 0} -> {v:a | v = head xs}

@@ -90,7 +90,7 @@ findWiredInSpecs mods = fmap catMaybes $ forM mods $ \m ->
           Nothing -> return Nothing
           Just specFile -> do
             (_, spec) <- parseSpecFile specFile
-            importSpecs <- parseSpecFileTree ms (imports spec)
+            importSpecs <- parseSpecFileTree (imports spec)
             let liquidLib = mkLiquidLibFromDeps spec importSpecs
             return $ Just $ LibFound m DiskLocation liquidLib
   where
@@ -104,14 +104,13 @@ findWiredInSpecs mods = fmap catMaybes $ forM mods $ \m ->
 
     -- | Yields the list of transitively imported modules from a
     -- list of module names (as symbols).
-    parseSpecFileTree :: String -> [Symbol] -> IO [(StableModule, Measure.BareSpec)]
-    parseSpecFileTree ms importSyms = do
+    parseSpecFileTree :: [Symbol] -> IO [(StableModule, Measure.BareSpec)]
+    parseSpecFileTree importSyms = do
       let symbolToSpecFile s =
-            fromMaybe (error $ "unknown import: " ++ symbolString s ++ " in " ++ ms ++ ".spec")
-              $ HashMap.lookup (symbolString s) (knownSpecs wiredInSpecsEnv)
-      rs <- mapM (readSpecWithStableModule . symbolToSpecFile) importSyms
-      fmap concat $ forM rs $ \r@(m, spec) -> do
-        importSpecs <- parseSpecFileTree (moduleNameString $ moduleName $ unStableModule m) (imports spec)
+              HashMap.lookup (symbolString s) (knownSpecs wiredInSpecsEnv)
+      rs <- mapM readSpecWithStableModule $ mapMaybe symbolToSpecFile importSyms
+      fmap concat $ forM rs $ \r@(_m, spec) -> do
+        importSpecs <- parseSpecFileTree (imports spec)
         return (r : importSpecs)
 
     readSpecWithStableModule f = do

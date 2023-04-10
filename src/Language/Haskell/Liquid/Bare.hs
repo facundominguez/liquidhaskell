@@ -30,6 +30,7 @@ import qualified Data.Binary                                as B
 import qualified Data.Maybe                                 as Mb
 import qualified Data.List                                  as L
 import qualified Data.HashMap.Strict                        as M
+import qualified Data.HashMap.Lazy                          as M.Lazy
 import qualified Data.HashSet                               as S
 import           Text.PrettyPrint.HughesPJ                  hiding (first, (<>)) -- (text, (<+>))
 import           System.FilePath                            (dropExtension)
@@ -203,7 +204,7 @@ makeGhcSpec cfg src lmap validatedSpecs = do
 
 
 ghcSpecEnv :: GhcSpec -> SEnv SortedReft
-ghcSpecEnv sp = F.notracepp "RENV" $ fromListSEnv binds
+ghcSpecEnv sp = F.notracepp "RENV" $ fromListSEnv $ binds
   where
     emb       = gsTcEmbeds (_gsName sp)
     binds     = F.notracepp "binds" $ concat
@@ -236,9 +237,10 @@ makeGhcSpec0 cfg src lmap mspecsNoCls = do
   let lSpec1   = lSpec0 <> makeLiftedSpec1 cfg src tycEnv lmap mySpec1
   let mySpec   = mySpec2 <> lSpec1
   let specs    = M.insert name mySpec iSpecs2
+      envs0    = envs specs
   let myRTE    = myRTEnv       src env sigEnv rtEnv
-  let (dg5, measEnv) = withDiagnostics $ makeMeasEnv      env tycEnv sigEnv       specs
-  let (dg4, sig) = withDiagnostics $ makeSpecSig cfg name specs env sigEnv   tycEnv measEnv (_giCbs src)
+  let (dg5, measEnv) = withDiagnostics $ makeMeasEnv env envs0 tycEnv sigEnv       specs
+  let (dg4, sig) = withDiagnostics $ makeSpecSig cfg name specs env envs0 sigEnv   tycEnv measEnv (_giCbs src)
   elaboratedSig <-
     if allowTC then Bare.makeClassAuxTypes (elaborateSpecType coreToLg simplifier) datacons instMethods
                               >>= elaborateSig sig
@@ -285,6 +287,14 @@ makeGhcSpec0 cfg src lmap mspecsNoCls = do
                 }
     })
   where
+    envs specs = \name -> Mb.fromMaybe env $ M.Lazy.lookup name narrowedEnvs
+      where
+        narrowedEnvs = M.Lazy.mapWithKey (\n sp -> narrowEnv n (imports sp)) specs
+        narrowEnv n imps = env
+          { Bare._reTyThings =
+              M.Lazy.map (filter ((`elem` (symbol n : imps)) . fst)) $ Bare._reTyThings env
+          }
+
     -- typeclass elaboration
 
     coreToLg ce =
@@ -732,12 +742,12 @@ makeAutoInst env name spec = M.fromList <$> kvs
 
 
 ----------------------------------------------------------------------------------------
-makeSpecSig :: Config -> ModName -> Bare.ModSpecs -> Bare.Env -> Bare.SigEnv -> Bare.TycEnv -> Bare.MeasEnv -> [Ghc.CoreBind]
+makeSpecSig :: Config -> ModName -> Bare.ModSpecs -> Bare.Env -> (ModName -> Bare.Env) -> Bare.SigEnv -> Bare.TycEnv -> Bare.MeasEnv -> [Ghc.CoreBind]
             -> Bare.Lookup GhcSpecSig
 ----------------------------------------------------------------------------------------
-makeSpecSig cfg name specs env sigEnv tycEnv measEnv cbs = do
+makeSpecSig cfg name specs env envs sigEnv tycEnv measEnv cbs = do
   mySigs     <- makeTySigs  env sigEnv name mySpec
-  aSigs      <- F.notracepp ("makeSpecSig aSigs " ++ F.showpp name) $ makeAsmSigs env sigEnv name specs
+  aSigs      <- F.notracepp ("makeSpecSig aSigs " ++ F.showpp name) $ makeAsmSigs envs sigEnv name specs
   let asmSigs =  Bare.tcSelVars tycEnv
               ++ aSigs
               ++ [ (x,t) | (_, x, t) <- concatMap snd (Bare.meCLaws measEnv) ]
@@ -833,10 +843,10 @@ checkDuplicateSigs xts = case Misc.uniqueByKey symXs  of
     symXs = [ (F.symbol x, F.loc t) | (x, t) <- xts ]
 
 
-makeAsmSigs :: Bare.Env -> Bare.SigEnv -> ModName -> Bare.ModSpecs -> Bare.Lookup [(Ghc.Var, LocSpecType)]
-makeAsmSigs env sigEnv myName specs = do
-  raSigs <- rawAsmSigs env myName specs
-  return [ (x, t) | (name, x, bt) <- raSigs, let t = Bare.cookSpecType env sigEnv name (Bare.LqTV x) bt ]
+makeAsmSigs :: (ModName -> Bare.Env) -> Bare.SigEnv -> ModName -> Bare.ModSpecs -> Bare.Lookup [(Ghc.Var, LocSpecType)]
+makeAsmSigs envs sigEnv myName specs = do
+  raSigs <- rawAsmSigs (envs myName) myName specs
+  return [ (x, t) | (name, x, bt) <- raSigs, let t = Bare.cookSpecType (envs name) sigEnv name (Bare.LqTV x) bt ]
 
 rawAsmSigs :: Bare.Env -> ModName -> Bare.ModSpecs -> Bare.Lookup [(ModName, Ghc.Var, LocBareType)]
 rawAsmSigs env myName specs = do
@@ -1170,14 +1180,14 @@ knownWiredTyCons env name = filter isKnown wiredTyCons
 
 -- REBARE: formerly, makeGhcCHOP2
 -------------------------------------------------------------------------------------------
-makeMeasEnv :: Bare.Env -> Bare.TycEnv -> Bare.SigEnv -> Bare.ModSpecs ->
+makeMeasEnv :: Bare.Env -> (ModName -> Bare.Env) -> Bare.TycEnv -> Bare.SigEnv -> Bare.ModSpecs ->
                Bare.Lookup Bare.MeasEnv
 -------------------------------------------------------------------------------------------
-makeMeasEnv env tycEnv sigEnv specs = do
+makeMeasEnv env envs tycEnv sigEnv specs = do
   laws        <- Bare.makeCLaws env sigEnv name specs
   (cls, mts)  <- Bare.makeClasses        env sigEnv name specs
   let dms      = Bare.makeDefaultMethods env mts
-  measures0   <- mapM (Bare.makeMeasureSpec env sigEnv name) (M.toList specs)
+  measures0   <- mapM (\(n, sp) -> Bare.makeMeasureSpec (envs n) sigEnv name (n, sp)) (M.toList specs)
   let measures = mconcat (Ms.mkMSpec' dcSelectors : measures0)
   let (cs, ms) = Bare.makeMeasureSpec'  (typeclass $ getConfig env)   measures
   let cms      = Bare.makeClassMeasureSpec measures

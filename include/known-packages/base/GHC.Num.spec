@@ -1,5 +1,7 @@
 module spec GHC.Num where
 
+import GHC.Num.Integer
+
 embed GHC.Integer.Type.Integer as int
 embed GHC.Num.Integer as int
 

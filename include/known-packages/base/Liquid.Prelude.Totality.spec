@@ -1,5 +1,6 @@
 module spec Liquid.Prelude.Totality where
 
+import GHC.Prim
 
 measure totalityError :: a -> Bool
 

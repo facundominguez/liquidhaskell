@@ -1,5 +1,6 @@
 module spec GHC.Real where
 
+import GHC.Num
 import GHC.Types
 
 (GHC.Real.^) :: (GHC.Num.Num a, GHC.Real.Integral b) => x:a -> y:{n:b | n >= 0} -> {z:a | (y == 0 => z == 1) && ((x == 0 && y /= 0) <=> z == 0)}

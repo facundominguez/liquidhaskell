@@ -1,5 +1,7 @@
 module spec GHC.Types where
 
+import GHC.Prim
+
 //  Boxed types
 embed GHC.Types.Double  as real
 embed GHC.Prim.Double#  as real
