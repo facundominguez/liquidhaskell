@@ -1,6 +1,9 @@
 module spec Data.ByteString.Short where
 
+import Data.ByteString.Internal
+import Data.ByteString.Short.Internal
 import Data.String
+import GHC.Types
 
 measure sbslen :: Data.ByteString.Short.ShortByteString -> { n : Int | 0 <= n }
 

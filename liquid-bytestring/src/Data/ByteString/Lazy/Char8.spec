@@ -1,5 +1,7 @@
 module spec Data.ByteString.Lazy.Char8 where
 
+import GHC.Types
+
 last :: { bs : Data.ByteString.Lazy.ByteString | 1 <= bllen bs } -> Char
 
 assume empty :: { bs : Data.ByteString.Lazy.ByteString | bllen bs == 0 }

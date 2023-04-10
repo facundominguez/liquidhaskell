@@ -1,6 +1,8 @@
 module spec Data.ByteString where
 
+import Data.ByteString.Internal
 import Data.String
+import GHC.Types
 
 measure bslen :: Data.ByteString.ByteString -> { n : Int | 0 <= n }
 

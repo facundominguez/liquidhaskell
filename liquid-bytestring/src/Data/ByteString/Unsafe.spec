@@ -1,5 +1,8 @@
 module spec Data.ByteString.Unsafe where
 
+import Data.ByteString
+import GHC.Types
+
 unsafeHead
     :: { bs : Data.ByteString.ByteString | 1 <= bslen bs } -> _ 
 

@@ -2,6 +2,9 @@ module spec Data.ByteString.Lazy where
 
 import Data.String
 import Data.ByteString
+import Data.ByteString.Lazy.Internal
+import GHC.Int
+import GHC.Types
 
 measure bllen :: Data.ByteString.Lazy.ByteString -> { n : GHC.Int.Int64 | 0 <= n }
 
