@@ -896,8 +896,10 @@ executable class-pos
                     , TypeEquality00
                     , Class00
                     , HiddenMethod00
+                    , ImportMethodConstraint
                     , Inst00
                     , RealProps1
+                    , TestMethodConstraint
                     , TypeEquality01
 
     ghc-options:      -fplugin=LiquidHaskell -fkeep-going -O0

@@ -1,0 +1,3 @@
+module ImportMethodConstraint where
+
+import TestMethodConstraint

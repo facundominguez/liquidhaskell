@@ -164,21 +164,28 @@ plugHolesOld allowTC tce tyi xx f t0 zz@(Loc l l' st0)
     = Loc l l'
     . mkArrow (zip (updateRTVar <$> αs') rs) ps' []
     . makeCls cs'
-    . goPlug tce tyi err f (subts su rt)
+    . goPlug tce tyi err f (subts su rt4)
     . mapExprReft (\_ -> F.applyCoSub coSub)
     . subts su
     $ st
   where
-    tyvsmap      = case Bare.runMapTyVars allowTC (toType False rt) st err of
+    tyvsmap      = case Bare.runMapTyVars allowTC (toType False rt4) st err of
                           Left e  -> Ex.throw e
                           Right s -> Bare.vmap s
     su           = [(y, rTyVar x)           | (x, y) <- tyvsmap]
     su'          = [(y, RVar (rTyVar x) ()) | (x, y) <- tyvsmap] :: [(RTyVar, RSort)]
     coSub        = M.fromList [(F.symbol y, F.FObj (F.symbol x)) | (y, x) <- su]
     ps'          = fmap (subts su') <$> ps
-    cs'          = [(F.dummySymbol, RApp c ts [] mempty) | (c, ts) <- cs2 ]
-    (αs', rs)    = unzip αs
-    (αs,_,cs2,rt) = bkUnivClass (F.notracepp "hs-spec" $ ofType (Ghc.expandTypeSynonyms t0) :: SpecType)
+    cs'          = [(F.dummySymbol, RApp c ts [] mempty) | (c, ts) <- cs4]
+    (αs', rs)    = unzip αs4
+    tt = ofType (Ghc.expandTypeSynonyms t0) :: SpecType
+    (αs,_,cs2,rt) = bkUnivClass (F.notracepp "hs-spec" tt)
+    -- Take universal quantifications and constraints again which might
+    -- appear in typeclass method signatures
+    (αs3,_,cs3,rt3) = bkUnivClass rt
+    -- Do not mess with quantification if there are no constraints
+    (αs4, cs4, rt4) = if null cs3 then (αs, cs2, rt) else (αs ++ αs3, cs2 ++ cs3, rt3)
+
     (_,ps,_ ,st) = bkUnivClass (F.notracepp "lq-spec" st0)
 
     makeCls cs t = foldr (uncurry (rFun' (classRFInfo allowTC))) t cs
@@ -198,15 +205,20 @@ plugHolesNew allowTC@False tce tyi xx f t0 zz@(Loc l l' st0)
     . goPlug tce tyi err f rt'
     $ st
   where
-    rt'          = tx rt
+    rt'          = tx rt3
     as''         = subRTVar su <$> as'
-    (as',rs)     = unzip as
-    cs'          = [ (F.dummySymbol, ct) | (c, t) <- tyCons, let ct = tx (RApp c t [] mempty) ]
+    (as',rs)     = unzip as3
+    cs'          = [ (F.dummySymbol, ct) | (c, t) <- tyCons3, let ct = tx (RApp c t [] mempty) ]
     tx           = subts su
-    su           = case Bare.runMapTyVars allowTC (toType False rt) st err of
+    su           = case Bare.runMapTyVars allowTC (toType False rt3) st err of
                           Left e  -> Ex.throw e
                           Right s -> [ (rTyVar x, y) | (x, y) <- Bare.vmap s]
     (as,_,tyCons,rt) = bkUnivClass (ofType (Ghc.expandTypeSynonyms t0) :: SpecType)
+    -- Take universal quantifications and constraints again which might
+    -- appear in typeclass method signatures
+    (as2,_,tyCons2,rt2) = bkUnivClass rt
+    -- Do not mess with quantification if there are no constraints
+    (as3, tyCons3, rt3) = if null tyCons2 then (as, tyCons, rt) else (as ++ as2, tyCons ++ tyCons2, rt2)
     (_,ps,_ ,st) = bkUnivClass st0
 
     makeCls cs t = foldr (uncurry (rFun' (classRFInfo allowTC))) t cs
@@ -225,17 +237,23 @@ plugHolesNew allowTC@True tce tyi a f t0 zz@(Loc l l' st0)
     . goPlug tce tyi err f rt'
     $ st
   where
-    rt'          = tx rt
+    rt'          = tx rt3
     as''         = subRTVar su <$> as'
-    (as',rs)     = unzip as
+    (as',rs)     = unzip as3
     -- cs'          = [ (F.dummySymbol, ct) | (c, t) <- cs, let ct = tx (RApp c t [] mempty) ]
     tx           = subts su
-    su           = case Bare.runMapTyVars allowTC (toType False rt) st err of
+    su           = case Bare.runMapTyVars allowTC (toType False rt3) st err of
                           Left e  -> Ex.throw e
                           Right s -> [ (rTyVar x, y) | (x, y) <- Bare.vmap s]
     (as,_,cs0,rt) = bkUnivClass' (ofType (Ghc.expandTypeSynonyms t0) :: SpecType)
+    -- Take universal quantifications and constraints again which might
+    -- appear in typeclass method signatures
+    (as2,_,cs2,rt2) = bkUnivClass' rt
+    -- Do not mess with quantification if there are no constraints
+    (as3, cs3, rt3) = if null cs2 then (as, cs0, rt) else (as ++ as2, cs0 ++ cs2, rt2)
+
     (_,ps,cs0' ,st) = bkUnivClass' st0
-    cs  = [ (x, classRFInfo allowTC, t, r) | (x,t,r)<-cs0]
+    cs  = [ (x, classRFInfo allowTC, t, r) | (x,t,r)<-cs3]
     cs' = [ (x, classRFInfo allowTC, t, r) | (x,t,r)<-cs0']
 
     err hsT lqT  = ErrMismatch (GM.fSrcSpan zz) (pprint a)
