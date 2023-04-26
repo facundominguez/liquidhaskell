@@ -57,6 +57,7 @@ module Language.Haskell.Liquid.Types.Types (
   , RTAlias (..)
   , OkRT
   , lmapEAlias
+  , showRType
 
   -- * Worlds
   , HSeg (..)
@@ -827,6 +828,20 @@ data RType c tv r
 
 instance (B.Binary c, B.Binary tv, B.Binary r) => B.Binary (RType c tv r)
 instance (NFData c, NFData tv, NFData r)       => NFData (RType c tv r)
+
+-- | A function useful for dumping RType values
+showRType :: (Show c, Show tv) => RType c tv r -> String
+showRType r@RVar{} = "(RVar " ++ show (rt_var r) ++ ")"
+showRType r@RFun{} = "(RFun " ++ showRType (rt_in r) ++ " " ++ showRType (rt_out r) ++ ")"
+showRType r@RAllT{} = "(RAllT " ++ show (rt_tvbind r) ++ " (" ++ showRType (rt_ty r) ++ "))"
+showRType RAllP{} = "RAllP"
+showRType r1@RApp{} = "(RApp (" ++ show (rt_tycon r1) ++ " " ++ unwords (map showRType (rt_args r1)) ++ "))"
+showRType RAllE{} = "RAllE"
+showRType REx{} = "REx"
+showRType RExprArg{} = "RExprArg"
+showRType RAppTy{} = "RAppTy"
+showRType RRTy{} = "RRTy"
+showRType RHole{} = "RHole"
 
 ignoreOblig :: RType t t1 t2 -> RType t t1 t2
 ignoreOblig (RRTy _ _ _ t) = t
