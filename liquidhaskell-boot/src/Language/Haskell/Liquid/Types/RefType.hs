@@ -1,4 +1,5 @@
 {-# LANGUAGE IncoherentInstances       #-}
+{-# LANGUAGE LambdaCase                #-}
 {-# LANGUAGE OverloadedStrings         #-}
 {-# LANGUAGE MultiParamTypeClasses     #-}
 {-# LANGUAGE ScopedTypeVariables       #-}
@@ -408,7 +409,20 @@ instance FreeVar BTyCon BTyVar where
 -- MOVE TO TYPES
 instance (Eq c, Eq tv, Hashable tv, PPrint tv, TyConable c, PPrint c, Reftable (RTProp c tv ()))
       => Eq (RType c tv ()) where
-  (==) = eqRSort M.empty
+  t1 == t2 =
+    let m = M.fromList $ zip (collectRAllTs t1) (collectRAllTs t2)
+     in eqRSort m t1 t2
+
+collectRAllTs :: RType a k r -> [k]
+collectRAllTs = go []
+  where
+    go acc = \case
+      RAllT b t _ -> ty_var_value b : go acc t
+      RAllP _ t -> go acc t
+      RFun _ _ t1 t2 _ -> go (go acc t2) t1
+      RAppTy t1 t2 _ -> go (go acc t2) t1
+      RApp _ ts _ _ -> foldr (flip go) acc ts
+      _ -> acc
 
 eqRSort :: (Eq a, Eq k, Hashable k, TyConable a, PPrint a, PPrint k, Reftable (RTProp a k ()))
         => M.HashMap k k -> RType a k () -> RType a k () -> Bool
@@ -416,11 +430,8 @@ eqRSort m (RAllP _ t) (RAllP _ t')
   = eqRSort m t t'
 eqRSort m (RAllP _ t) t'
   = eqRSort m t t'
-eqRSort m (RAllT a t _) (RAllT a' t' _)
-  | a == a'
+eqRSort m (RAllT _ t _) (RAllT _ t' _)
   = eqRSort m t t'
-  | otherwise
-  = eqRSort (M.insert (ty_var_value a') (ty_var_value a) m) t t'
 eqRSort m (RAllT _ t _) t'
   = eqRSort m t t'
 eqRSort m t (RAllT _ t' _)
@@ -432,7 +443,7 @@ eqRSort m (RAppTy t1 t2 _) (RAppTy t1' t2' _)
 eqRSort m (RApp c ts _ _) (RApp c' ts' _ _)
   = c == c' && length ts == length ts' && and (zipWith (eqRSort m) ts ts')
 eqRSort m (RVar a _) (RVar a' _)
-  = a == M.lookupDefault a' a' m
+  = a' == M.lookupDefault a a m
 eqRSort _ (RHole _) _
   = True
 eqRSort _ _         (RHole _)
