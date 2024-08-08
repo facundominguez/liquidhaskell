@@ -61,7 +61,7 @@ makeHaskellAxioms :: Config -> GhcSrc -> Bare.Env -> Bare.TycEnv -> ModName -> L
 -----------------------------------------------------------------------------------------------
 makeHaskellAxioms cfg src env tycEnv name lmap spSig spec = do
   wiDefs     <- wiredDefs cfg env name spSig
-  let refDefs = getReflectDefs src spSig spec
+  let refDefs = getReflectDefs src spSig spec env name
   return (makeAxiom env tycEnv name lmap <$> (wiDefs ++ refDefs))
 
 -----------------------------------------------------------------------------------------------
@@ -82,7 +82,7 @@ makeAssumeReflectAxioms src env tycEnv name spSig spec = do
     Nothing -> return $ turnIntoAxiom <$> Ms.asmReflectSigs spec
   where
     turnIntoAxiom (actual, pretended) = makeAssumeReflectAxiom spSig env embs name (actual, pretended)
-    refDefs                 = getReflectDefs src spSig spec
+    refDefs                 = getReflectDefs src spSig spec env name
     embs                    = Bare.tcEmbs       tycEnv
     refSymbols              = fst4 <$> refDefs
     reflActSymbols          = fst <$> Ms.asmReflectSigs spec
@@ -154,23 +154,37 @@ strengthenSpecWithMeasure sig env actualV qPretended =
             toRTypeRep $ Mb.fromMaybe (ofType actualTy) mbT
     allowTC = typeclass (getConfig env)
 
-getReflectDefs :: GhcSrc -> GhcSpecSig -> Ms.BareSpec
+getReflectDefs :: GhcSrc -> GhcSpecSig -> Ms.BareSpec -> Bare.Env -> ModName
                -> [(LocSymbol, Maybe SpecType, Ghc.Var, Ghc.CoreExpr)]
-getReflectDefs src sig spec = findVarDefType cbs sigs <$> xs
+getReflectDefs src sig spec env modName = findVarDefType cbs sigs env modName <$> xs
   where
     sigs                    = gsTySigs sig
     xs                      = S.toList (Ms.reflects spec)
     cbs                     = _giCbs src
 
-findVarDefType :: [Ghc.CoreBind] -> [(Ghc.Var, LocSpecType)] -> LocSymbol
+findVarDefType :: [Ghc.CoreBind] -> [(Ghc.Var, LocSpecType)] -> Bare.Env -> ModName -> LocSymbol
                -> (LocSymbol, Maybe SpecType, Ghc.Var, Ghc.CoreExpr)
-findVarDefType cbs sigs x = case findVarDefMethod (val x) cbs of
+findVarDefType cbs sigs env modName x = case findVarDefMethod (val x) cbs of
   -- YL: probably ok even without checking typeclass flag since user cannot
   -- manually reflect internal names
   Just (v, e) -> if GM.isExternalId v || isMethod (F.symbol x) || isDictionary (F.symbol x)
                    then (x, val <$> lookup v sigs, v, e)
                    else Ex.throw $ mkError x ("Lifted functions must be exported; please export " ++ show v)
-  Nothing     -> Ex.throw $ mkError x $ show (val x) ++ " is not in scope"
+  Nothing     ->
+    case unfolding of
+      Just e -> (x, val <$> lookup var sigs, var, e)
+      _ -> Ex.throw $ mkError x "Symbol exists but is not defined in the current file, and no unfolding is available in the interface files"
+  where
+    qualifySym l = Bare.qualifyTop env modName (loc l) (val l)
+    var = case Bare.maybeResolveSym env modName "findVarDefType" (x {val = qualifySym x}) of
+                Just v -> v
+                _      -> Ex.throw $ mkError x "Not found in scope"
+    info = Ghc.idInfo var
+    unfolding = getExpr . Ghc.realUnfoldingInfo $ info
+    getExpr :: Ghc.Unfolding -> Maybe Ghc.CoreExpr
+    getExpr (Ghc.CoreUnfolding expr _ _ _ _) = Just expr
+    getExpr _ = Nothing
+
 
 --------------------------------------------------------------------------------
 makeAxiom :: Bare.Env -> Bare.TycEnv -> ModName -> LogicMap
