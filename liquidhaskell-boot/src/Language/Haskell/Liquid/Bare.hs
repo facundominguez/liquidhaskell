@@ -285,7 +285,9 @@ makeGhcSpec0 cfg src lmap mspecsNoCls = do
                 , asmSigs = Ms.asmSigs finalLiftedSpec ++ Ms.asmSigs mySpec
                   -- Export all the assumptions (not just the ones created out of reflection) in
                   -- a 'LiftedSpec'.
-                , imeasures = Ms.imeasures finalLiftedSpec ++ Ms.imeasures mySpec ++ (snd <$> Bare.meOpaqueRefl measEnv)
+                , omeasures = Ms.omeasures finalLiftedSpec ++ (snd <$> Bare.meOpaqueRefl measEnv)
+                  -- Preserve 'o-measures'.
+                , imeasures = Ms.imeasures finalLiftedSpec ++ Ms.imeasures mySpec
                   -- Preserve user-defined 'imeasures'.
                 , dvariance = Ms.dvariance finalLiftedSpec ++ Ms.dvariance mySpec
                   -- Preserve user-defined 'dvariance'.
@@ -1053,6 +1055,7 @@ makeSpecData src env sigEnv measEnv sig specs = SpData
                    ]
   , gsMeas       = [ (F.symbol x, uRType <$> t) | (x, t) <- measVars ]
   , gsMeasures   = Bare.qualifyTopDummy env name <$> (ms1 ++ ms2)
+  , gsOpaqueRefls = fst <$> Bare.meOpaqueRefl measEnv
   , gsInvariants = Misc.nubHashOn (F.loc . snd) invs
   , gsIaliases   = concatMap (makeIAliases env sigEnv) (M.toList specs)
   , gsUnsorted   = usI ++ concatMap msUnSorted (concatMap measures specs)

@@ -432,11 +432,12 @@ getOpaqueReflOfVar definedSymbols var _ eq = S.filter toConsider varsInLogic
     getExpr _ = Nothing
 
 bareMSpec :: Bare.Env -> Bare.SigEnv -> ModName -> ModName -> Ms.BareSpec -> Ms.MSpec LocBareType LocSymbol
-bareMSpec env sigEnv myName name spec = Ms.mkMSpec ms cms ims
+bareMSpec env sigEnv myName name spec = Ms.mkMSpec ms cms ims oms
   where
     cms        = F.notracepp "CMS" $ filter inScope1 $             Ms.cmeasures spec
     ms         = F.notracepp "UMS" $ filter inScope2 $ expMeas <$> Ms.measures  spec
     ims        = F.notracepp "IMS" $ filter inScope2 $ expMeas <$> Ms.imeasures spec
+    oms        = F.notracepp "OMS" $ filter inScope2 $ expMeas <$> Ms.omeasures spec
     expMeas    = expandMeasure env name  rtEnv
     rtEnv      = Bare.sigRTEnv          sigEnv
     force      = name == myName

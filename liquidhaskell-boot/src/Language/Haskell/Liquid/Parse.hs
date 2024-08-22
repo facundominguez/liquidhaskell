@@ -1078,6 +1078,7 @@ mkSpec name xs         = (name,) $ qualifySpec (symbol name) Measure.Spec
   , Measure.pragmas    = [s | Pragma s <- xs]
   , Measure.cmeasures  = [m | CMeas  m <- xs]
   , Measure.imeasures  = [m | IMeas  m <- xs]
+  , Measure.omeasures  = []
   , Measure.classes    = [c | Class  c <- xs]
   , Measure.relational = [r | Relational r <- xs]
   , Measure.asmRel     = [r | AssmRel r <- xs]

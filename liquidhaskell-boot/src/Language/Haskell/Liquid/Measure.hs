@@ -60,13 +60,13 @@ mkMSpec' ms = MSpec cm mm M.empty []
     cm     = groupMap (symbol . ctor) $ concatMap msEqns ms
     mm     = M.fromList [(msName m, m) | m <- ms ]
 
-mkMSpec :: [Measure t LocSymbol] -> [Measure t ()] -> [Measure t LocSymbol] -> MSpec t LocSymbol
-mkMSpec ms cms ims = MSpec cm mm cmm ims
+mkMSpec :: [Measure t LocSymbol] -> [Measure t ()] -> [Measure t LocSymbol] -> [Measure t LocSymbol] -> MSpec t LocSymbol
+mkMSpec ms cms ims oms = MSpec cm mm cmm ims
   where
     cm     = groupMap (val . ctor) $ concatMap msEqns (ms'++ims)
     mm     = M.fromList [(msName m, m) | m <- ms' ]
     cmm    = M.fromList [(msName m, m) | m <- cms ]
-    ms'    = checkDuplicateMeasure ms
+    ms'    = checkDuplicateMeasure ms ++ oms
 
 
 checkDuplicateMeasure :: [Measure ty ctor] -> [Measure ty ctor]

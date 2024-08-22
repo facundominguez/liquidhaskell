@@ -111,6 +111,7 @@ getGlobalSyms (_, spec)
        $ (mbName <$> measures  spec)
       ++ (mbName <$> cmeasures spec)
       ++ (mbName <$> imeasures spec)
+      ++ (mbName <$> omeasures spec)
   where
     mbName = F.val . msName
 

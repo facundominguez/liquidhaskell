@@ -274,6 +274,7 @@ data GhcSpecData = SpData
   , gsInvariants :: ![(Maybe Var, LocSpecType)]   -- ^ Data type invariants from measure definitions, e.g forall a. {v: [a] | len(v) >= 0}
   , gsIaliases   :: ![(LocSpecType, LocSpecType)] -- ^ Data type invariant aliases
   , gsMeasures   :: ![Measure SpecType DataCon]   -- ^ Measure definitions
+  , gsOpaqueRefls:: ![Var]                        -- ^ List of opaque reflected measures
   , gsUnsorted   :: ![UnSortedExpr]
   }
   deriving Show
@@ -422,6 +423,7 @@ data Spec ty bndr  = Spec
   , pragmas    :: ![F.Located String]                                 -- ^ Command-line configurations passed in through source
   , cmeasures  :: ![Measure ty ()]                                    -- ^ Measures attached to a type-class
   , imeasures  :: ![Measure ty bndr]                                  -- ^ Mappings from (measure,type) -> measure
+  , omeasures  :: ![Measure ty bndr]                                  -- ^ Opaque reflection measures
   , classes    :: ![RClass ty]                                        -- ^ Refined Type-Classes
   , claws      :: ![RClass ty]                                        -- ^ Refined Type-Classe Laws
   , relational :: ![(LocSymbol, LocSymbol, ty, ty, RelExpr, RelExpr)] -- ^ Relational types
@@ -470,6 +472,7 @@ instance Semigroup (Spec ty bndr) where
            , pragmas    =           pragmas    s1 ++ pragmas    s2
            , cmeasures  =           cmeasures  s1 ++ cmeasures  s2
            , imeasures  =           imeasures  s1 ++ imeasures  s2
+           , omeasures  =           omeasures  s1 ++ omeasures  s2
            , classes    =           classes    s1 ++ classes    s2
            , claws      =           claws      s1 ++ claws      s2
            , relational =           relational s1 ++ relational s2
@@ -533,6 +536,7 @@ instance Monoid (Spec ty bndr) where
            , pragmas    = []
            , cmeasures  = []
            , imeasures  = []
+           , omeasures  = []
            , classes    = []
            , claws      = []
            , relational = []
@@ -611,6 +615,8 @@ data LiftedSpec = LiftedSpec
   , liftedCmeasures  :: HashSet (Measure LocBareType ())
     -- ^ Measures attached to a type-class
   , liftedImeasures  :: HashSet (Measure LocBareType F.LocSymbol)
+    -- Lifted opaque reflection measures
+  , liftedOmeasures  :: HashSet (Measure LocBareType F.LocSymbol)
     -- ^ Mappings from (measure,type) -> measure
   , liftedClasses    :: HashSet (RClass LocBareType)
     -- ^ Refined Type-Classes
@@ -655,6 +661,7 @@ emptyLiftedSpec = LiftedSpec
   , liftedAutosize   = mempty
   , liftedCmeasures  = mempty
   , liftedImeasures  = mempty
+  , liftedOmeasures  = mempty
   , liftedClasses    = mempty
   , liftedClaws      = mempty
   , liftedRinstance  = mempty
@@ -834,6 +841,7 @@ toLiftedSpec a = LiftedSpec
   , liftedAutosize   = autosize a
   , liftedCmeasures  = S.fromList . cmeasures $ a
   , liftedImeasures  = S.fromList . imeasures $ a
+  , liftedOmeasures  = S.fromList . omeasures $ a
   , liftedClasses    = S.fromList . classes $ a
   , liftedClaws      = S.fromList . claws $ a
   , liftedRinstance  = S.fromList . rinstance $ a
@@ -884,6 +892,7 @@ unsafeFromLiftedSpec a = Spec
   , pragmas    = mempty
   , cmeasures  = S.toList . liftedCmeasures $ a
   , imeasures  = S.toList . liftedImeasures $ a
+  , omeasures  = S.toList . liftedOmeasures $ a
   , classes    = S.toList . liftedClasses $ a
   , claws      = S.toList . liftedClaws $ a
   , termexprs  = mempty
