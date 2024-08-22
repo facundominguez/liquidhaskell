@@ -12,7 +12,10 @@ module Language.Haskell.Liquid.Bare.Measure
   , makeMeasureSelectors
   , makeMeasureSpec
   , makeMeasureSpec'
+  , getLocReflects
+  , makeOpaqueReflMeasures
   , varMeasures
+  , getMeasVars
   , makeClassMeasureSpec
   -- , makeHaskellBounds
   ) where
@@ -47,6 +50,8 @@ import qualified Language.Haskell.Liquid.Bare.Expand   as Bare
 import qualified Language.Haskell.Liquid.Bare.DataType as Bare
 import qualified Language.Haskell.Liquid.Bare.ToBare   as Bare
 import Control.Monad (mapM)
+import qualified GHC.List as L
+import Data.Tuple.Extra (uncurry3)
 
 --------------------------------------------------------------------------------
 makeHaskellMeasures :: Bool -> GhcSrc -> Bare.TycEnv -> LogicMap -> Ms.BareSpec
@@ -359,6 +364,73 @@ makeMeasureSpec env sigEnv myName (name, spec)
   . bareMSpec     env sigEnv myName name
   $ spec
 
+--- Returns all the reflected symbols.
+--- If Env is provided, the symbols are qualified using the environment.
+getLocReflects :: Maybe Bare.Env -> Bare.ModSpecs -> S.HashSet F.LocSymbol
+getLocReflects mbEnv = S.unions . fmap (uncurry $ names mbEnv) . M.toList
+  where
+    names (Just env) modName z = Bare.qualifyLocSymbolTop env modName `S.map` unqualified z
+    names Nothing _ z = unqualified z
+    unqualified z = S.unions [ Ms.reflects z, S.fromList (snd <$> Ms.asmReflectSigs z), S.fromList (fst <$> Ms.asmReflectSigs z), Ms.inlines z, Ms.hmeas z ]
+
+----------------------------------------------------
+-- Looks at the given list of equations and finds any undefined symbol in the logic,
+-- for which we need to introduce an opaque reflection.
+-- Returns the corresponding measures. Second part of the returned tuple is the information to save
+-- to the `meOpaqueRefl` field of the measure environment.
+makeOpaqueReflMeasures :: Bare.Env -> Bare.MeasEnv -> Bare.TycEnv -> Bare.ModSpecs ->
+              [(Ghc.Var, LocSpecType, F.Equation)] ->
+               Bare.Lookup ([MSpec SpecType Ghc.DataCon], [(Ghc.Var, Measure LocBareType ctor)])
+makeOpaqueReflMeasures env measEnv tycEnv specs eqs = do
+  res <- mapM transformVar $ S.toList varsToConsider
+  return $ unzip res
+  where
+    specsList = M.toList specs
+    -- Get all the defined symbols. Also, fully qualify them by the way (for those for which it's possible and not already done).
+    definedSymbols =
+      S.unions (uncurry getFromAxioms <$> specsList) -- reflections that ended up in equations
+      `S.union` getLocReflects (Just env) specs -- reflected symbols
+      `S.union` measVars -- Get the data constructors, ex. for Lit00.0
+      `S.union` S.unions (uncurry getDataDecls <$> specsList) -- get the Predicated type defs, ex. for T1669.CSemigroup
+      `S.union` S.unions (getAliases . snd <$> specsList) -- aliases, ex. for T1738Lib.incr
+    getFromAxioms modName spec = S.fromList $ Bare.qualifyLocSymbolTop env modName . localize . F.eqName <$> Ms.axeqs spec
+    measVars     = S.fromList $ localize . fst <$> getMeasVars env measEnv
+    getDataDecls modName spec = S.unions $ getFromDataCtor modName <$> concat (tycDCons `Mb.mapMaybe` (dataDecls spec ++ newtyDecls spec))
+    getFromDataCtor modName decl = S.fromList $ Bare.qualifyLocSymbolTop env modName <$> (dcName decl : (localize . fst <$> dcFields decl))
+    getAliases spec = S.fromList $ fmap rtName <$> Ms.ealiases spec
+    localize :: F.Symbol -> F.LocSymbol
+    localize sym = maybe (dummyLoc sym) varLocSym $ L.lookup sym (Bare.reSyms env)
+    -- Variables to consider
+    varsToConsider = S.unions $ uncurry3 (getOpaqueReflOfVar definedSymbols) <$> eqs
+    -- Main function: creates a (dummy) measure about a given variable
+    transformVar :: Ghc.Var -> Bare.Lookup (MSpec SpecType Ghc.DataCon, (Ghc.Var, Measure LocBareType ctor))
+    transformVar var = do
+      mspec <- mkMeasureDCon env (Bare.tcName tycEnv) (Ms.mkMSpec' [smeas])
+      return (mspec, (var, bmeas))
+      where
+        locSym = F.atLoc (loc specType) (F.symbol var)
+        specType = varSpecType var
+        bareType = varBareType var
+        bmeas = M locSym bareType [] MsReflect []
+        smeas = M locSym (val specType) [] MsReflect []
+
+-- Get the set of "free" symbols in the (reflection of the) unfolding of a given variable. Free symbols are those that are not
+-- already in the logic and that appear in the reflection of the unfolding but do not appear in the set of defined variables.
+-- For this purpose, you need to give a set of defined variables, the variable whose definition you want to unfold and its corresponding
+-- equation in the logic.
+getOpaqueReflOfVar  :: S.HashSet LocSymbol -> Ghc.Var -> LocSpecType -> F.Equation -> S.HashSet Ghc.Var
+getOpaqueReflOfVar definedSymbols var _ eq = S.filter toConsider varsInLogic
+  where
+    reflExpr = getUnfolding var
+    allVars = maybe S.empty GM.collectAllVars reflExpr
+    symsInLogic = F.exprSymbolsSet (F.eqBody eq)
+    varsInLogic = S.filter (\v -> F.symbol v `S.member` symsInLogic) allVars
+    toConsider v = Ghc.isExportedId v && not (S.member (varLocSym v) definedSymbols)
+    getUnfolding = getExpr . Ghc.realUnfoldingInfo . Ghc.idInfo
+    getExpr :: Ghc.Unfolding -> Maybe Ghc.CoreExpr
+    getExpr (Ghc.CoreUnfolding expr _ _ _ _) = Just expr
+    getExpr _ = Nothing
+
 bareMSpec :: Bare.Env -> Bare.SigEnv -> ModName -> ModName -> Ms.BareSpec -> Ms.MSpec LocBareType LocSymbol
 bareMSpec env sigEnv myName name spec = Ms.mkMSpec ms cms ims
   where
@@ -437,6 +509,11 @@ varMeasures env =
       , GM.isDataConId v
       , isSimpleType (Ghc.varType v) ]
 
+getMeasVars :: Bare.Env -> Bare.MeasEnv -> [(F.Symbol, Located (RRType F.Reft))]
+getMeasVars env measEnv = Bare.meSyms measEnv -- ms'
+                            ++ Bare.meClassSyms measEnv -- cms'
+                            ++ varMeasures env
+
 knownVars :: Bare.Env -> [Ghc.Var]
 knownVars env = [ v | (_, xThings)   <- M.toList (Bare._reTyThings env)
                     , (_,Ghc.AnId v) <- xThings
@@ -444,6 +521,12 @@ knownVars env = [ v | (_, xThings)   <- M.toList (Bare._reTyThings env)
 
 varSpecType :: (Monoid r) => Ghc.Var -> Located (RRType r)
 varSpecType = fmap (RT.ofType . Ghc.varType) . GM.locNamedThing
+
+varBareType :: (Monoid r) => Ghc.Var -> Located (BRType r)
+varBareType = fmap (RT.bareOfType . Ghc.varType) . GM.locNamedThing
+
+varLocSym :: Ghc.Var -> LocSymbol
+varLocSym v = F.symbol <$> GM.locNamedThing v
 
 isSimpleType :: Ghc.Type -> Bool
 isSimpleType = isFirstOrder . RT.typeSort mempty

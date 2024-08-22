@@ -102,6 +102,7 @@ import           GHC                  as Ghc
     , isClassOpId_maybe
     , isClassTyCon
     , isDictonaryId
+    , isExportedId
     , isExternalName
     , isFamilyTyCon
     , isGoodSrcSpan

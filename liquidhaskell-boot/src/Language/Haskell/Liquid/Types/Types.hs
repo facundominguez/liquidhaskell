@@ -2135,7 +2135,7 @@ type UnSortedExprs = [UnSortedExpr] -- mempty = []
 type UnSortedExpr  = ([F.Symbol], F.Expr)
 
 data MeasureKind
-  = MsReflect     -- ^ due to `reflect foo`
+  = MsReflect     -- ^ due to `reflect foo`, used for opaque reflection
   | MsMeasure     -- ^ due to `measure foo` with old-style (non-haskell) equations
   | MsLifted      -- ^ due to `measure foo` with new-style haskell equations
   | MsClass       -- ^ due to `class measure` definition

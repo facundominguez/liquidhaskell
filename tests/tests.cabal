@@ -2208,6 +2208,15 @@ executable basic-pos
                     , Inc04
                     , Infer00
                     , List00
+                    , OpaqueRefl01
+                    , OpaqueRefl02
+                    , OpaqueRefl03A
+                    , OpaqueRefl03B
+                    , OpaqueRefl03C
+                    , OpaqueRefl03D
+                    , OpaqueRefl04
+                    , OpaqueRefl05
+                    , OpaqueRefl06
                     , Poly00
                     , SkipDerived00
 

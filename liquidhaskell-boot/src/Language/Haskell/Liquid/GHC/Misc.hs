@@ -1007,3 +1007,19 @@ prependGHCRealQual = varQual_RDR gHC_INTERNAL_REAL
 
 isFromGHCReal :: NamedThing a => a -> Bool
 isFromGHCReal x = Ghc.nameModule (Ghc.getName x) == gHC_INTERNAL_REAL
+
+-- Collect all variables (free and bound) in a CoreExpr. Couldn't find in in GHC libs so here it is
+collectAllVars :: CoreExpr -> S.HashSet Var
+collectAllVars = go S.empty
+  where
+    go vars (Let (NonRec b rhs) e) = go (go (S.insert b vars) rhs) e
+    go vars (Let (Rec binds) e)    = foldr (\(b, rhs) vs -> go (S.insert b vs) rhs) (go vars e) binds
+    go vars (App e1 e2)     = go (go vars e1) e2
+    go vars (Lam b e)       = go (S.insert b vars) e
+    go vars (Case scrut b _ alts)  = foldr (\(Alt _ _ alt) vs -> go vs alt) (go (S.insert b vars) scrut) alts
+    go vars (Cast e _)      = go vars e
+    go vars (Tick _ e)      = go vars e
+    go vars (Var v)         = S.insert v vars
+    go vars (Lit _)         = vars
+    go vars (Coercion _)    = vars
+    go vars (Type _)        = vars
