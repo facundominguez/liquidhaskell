@@ -238,6 +238,8 @@ makeGhcSpec0 cfg src lmap mspecsNoCls = do
   let mySpec   = mySpec2 <> lSpec1
   let specs    = M.insert name mySpec iSpecs2
   let myRTE    = myRTEnv       src env sigEnv rtEnv
+  -- NB: we first compute a measure environment w/o the opaque reflections, so that we can bootstrap
+  -- the signature `sig`. Then we'll add the opaque reflections before we compute `sData` and al.
   let (dg1, measEnv0) = withDiagnostics $ makeMeasEnv      env tycEnv sigEnv       specs
   let (dg2, sig) = withDiagnostics $ makeSpecSig cfg name specs env sigEnv   tycEnv measEnv0 (_giCbs src)
   elaboratedSig <-
@@ -286,7 +288,7 @@ makeGhcSpec0 cfg src lmap mspecsNoCls = do
                   -- Export all the assumptions (not just the ones created out of reflection) in
                   -- a 'LiftedSpec'.
                 , omeasures = Ms.omeasures finalLiftedSpec ++ (snd <$> Bare.meOpaqueRefl measEnv)
-                  -- Preserve 'o-measures'.
+                  -- Preserve 'o-measures': they are the opaque reflections
                 , imeasures = Ms.imeasures finalLiftedSpec ++ Ms.imeasures mySpec
                   -- Preserve user-defined 'imeasures'.
                 , dvariance = Ms.dvariance finalLiftedSpec ++ Ms.dvariance mySpec
@@ -726,6 +728,11 @@ addReflSigs env tycEnv name rtEnv measEnv refl sig =
     -- signature of the actual function was asserted and not assumed, we do not put our new signature for the actual function
     -- in `gsTySigs` (which is for asserted signatures). Indeed, the new signature will *always* be an assumption since we
     -- add the extra post-condition that the actual and pretended function behave in the same way.
+    -- Also, we add here the strengthened post-conditions relative to opaque reflections.
+    -- We may redefine assumptions because of opaque reflections, so we just take the union of maps and ignore duplicates.
+    -- Based on `M.union`'s handling of duplicates, the leftmost elements in the chain of `M.union` will precede over those
+    -- after, which is why we put the opaque reflection first in the chain. The signatures for opaque reflections are created
+    -- using the part of the pipeline of assume-reflect, namely the strengthening of post-conditions.
     myGsAsmSigs = M.toList $
         M.fromList (Misc.tripleToPair <$> (createUpdatedSpecs . fst) `Mb.mapMaybe` Bare.meOpaqueRefl measEnv)
         `M.union` M.fromList (filter notReflected (gsAsmSigs sig))
@@ -1283,6 +1290,8 @@ addOpaqueReflMeas :: Bare.Env -> Bare.TycEnv -> Bare.MeasEnv -> Bare.ModSpecs ->
 -------------------------------------------------------------------------------------------
 addOpaqueReflMeas env tycEnv measEnv specs eqs = do
   (measures0, opaqueRefl)   <- Bare.makeOpaqueReflMeasures env measEnv tycEnv specs eqs
+  -- Rest of the code is the same idea as for makeMeasEnv, only we just care on how to get
+  -- `meSyms` (no class, data constructor or other stuff here).
   let measures = mconcat measures0
   let (_, ms) = Bare.makeMeasureSpec'  (typeclass $ getConfig env)   measures
   let cms      = Bare.makeClassMeasureSpec measures
