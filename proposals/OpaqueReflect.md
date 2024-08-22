@@ -1,8 +1,8 @@
 # Specification of opaque reflection
 
-## Goal
+This spec addresses #1892. The goal is to permit the reflection of functions which contain symbols that are not already in the logic, through the automatic lifting of the symbols which are not in the logic, as uninterpreted functions.
 
-This PR addresses #1892. The goal is to permit the reflection of functions which contain symbols that are not already in the logic, through the automatic lifting of the symbols which are not in the logic, using measures.
+The idea behind issue #1892 is that you may want to reflect a function without reflecting all the functions that are in the definition. For example, `Data.Map.lookup` may not be necessarily reflected for a function containing it to be reflected and reasoned about. Currently, the process of adding a dummy measure for functions we don't want to reflect is done manually and is often required. Such that it would be preferable to make opaque-reflection a default behavior, if no reflection is available for the symbol. In particular, because it allows the reflection of functions using imported symbols, that may not have been reflected there in the first place.
 
 ## Syntax and use
 
@@ -25,10 +25,10 @@ It will introduce measures for filter and even, such that the result would be eq
 
 module OpaqueRefl06 where
 
-{-@ measure GHC.List.filter :: (a -> Bool) -> [a] -> [a] @-}
-{-@ assume GHC.List.filter :: p:(a -> Bool) -> xs:[a] -> {v : [a] | v == GHC.List.filter p xs && len v <= len xs} @-}
-{-@ measure GHC.Real.even :: Integral a => a -> Bool @-}
-{-@ assume GHC.Real.even :: Integral a => x:a -> {VV : Bool | VV == GHC.Real.even x} @-}
+{-@ measure GHC.Internal.List.filter :: (a -> Bool) -> [a] -> [a] @-}
+{-@ assume GHC.Internal.List.filter :: p:(a -> Bool) -> xs:[a] -> {v : [a] | v == GHC.Internal.List.filter p xs && len v <= len xs} @-}
+{-@ measure GHC.Internal.Real.even :: a -> GHC.Types.Bool @-}
+{-@ assume GHC.Internal.Real.even :: x:a -> {VV : GHC.Types.Bool | VV == GHC.Internal.Real.even x} @-}
 
 {-@ reflect keepEvens @-}
 keepEvens :: [Int] -> [Int]
@@ -41,21 +41,36 @@ There is no specific syntax for opaque reflection. Instead, it takes place when 
 
 For each unlifted free variable, it introduces a measure for it. For each measure introduced, we link the measure to the original function by strengthening the post-condition of the function, using the same pipeline as for reflection. We strengthen the post-condition by saying that the result `vv` is equal to the application of the measure to the arguments.
 
-If the user wishes to see what functions were opaque reflected, they can use the `--dump-opaque-reflections` pragma. It will list in the stdout the functions for which a measure was introduced automatically by opaque reflection.
+For instance,
 
-For instance, 
-
-`` `
+```Haskell
 {-@ assume GHC.List.filter :: p:(a -> GHC.Types.Bool) -> xs:[a] -> {v: [a] | len(v) <= len(xs) } @-}
 ```
 
 Would become:
 
-`` `
+```Haskell
 {-@ assume GHC.List.filter :: p:(a -> GHC.Types.Bool) -> xs:[a] -> {v: [a] | len(v) <= len(xs) && v = GHC.List.filter p xs} @-}
 ```
 
 The measure can bear the same name as the original function, since the symbol was unbounded in the logic before (otherwise we would not perform opaque reflection in the first place). Whence `filter` in the post-condition truly refers to the measure and not the Haskell function.
+
+If the user wishes to see what functions were opaque reflected, they can use the `--dump-opaque-reflections` pragma. It will list in the stdout the functions for which a measure was introduced automatically by opaque reflection. An example output for the following code is:
+
+```Haskell
+{-@ LIQUID "--reflection"      @-}
+{-@ LIQUID "--dump-opaque-reflections"      @-}
+
+module OpaqueRefl06 where
+
+{-@ reflect keepEvens @-}
+keepEvens :: [Int] -> [Int]
+keepEvens = filter even
+```
+
+```
+Opaque reflections: [GHC.Internal.List.filter,GHC.Internal.Real.even]
+```
 
 ### Postcondition
 Strengthening the postcondition is useful to get lemmas for free and be able to reflect opaquely about those functions.
