@@ -433,7 +433,8 @@ getOpaqueReflOfVar  :: S.HashSet LocSymbol -> Ghc.Var -> LocSpecType -> F.Equati
 getOpaqueReflOfVar definedSymbols var _ eq = S.filter toConsider varsInLogic
   where
     reflExpr = getUnfolding var
-    allVars = maybe S.empty GM.collectAllFreeVars reflExpr
+    getAllFreeVars = Ghc.exprSomeFreeVarsList (const True)
+    allVars = maybe S.empty (S.fromList . getAllFreeVars) reflExpr
     symsInLogic = F.exprSymbolsSet (F.eqBody eq)
     varsInLogic = S.filter (\v -> F.symbol v `S.member` symsInLogic) allVars
     toConsider v = Ghc.isExportedId v && not (S.member (varLocSym v) definedSymbols)
