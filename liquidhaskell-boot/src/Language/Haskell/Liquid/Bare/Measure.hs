@@ -51,7 +51,6 @@ import qualified Language.Haskell.Liquid.Bare.DataType as Bare
 import qualified Language.Haskell.Liquid.Bare.ToBare   as Bare
 import Control.Monad (mapM)
 import qualified GHC.List as L
-import Data.Tuple.Extra (uncurry3)
 
 --------------------------------------------------------------------------------
 makeHaskellMeasures :: Bool -> GhcSrc -> Bare.TycEnv -> LogicMap -> Ms.BareSpec
@@ -410,8 +409,11 @@ makeOpaqueReflMeasures env measEnv tycEnv specs eqs = do
     getAliases spec = S.fromList $ fmap rtName <$> Ms.ealiases spec
     localize :: F.Symbol -> F.LocSymbol
     localize sym = maybe (dummyLoc sym) varLocSym $ L.lookup sym (Bare.reSyms env)
+    toConsider v = not (S.member (varLocSym v) definedSymbols)
     -- Variables to consider
-    varsToConsider = S.unions $ uncurry3 (getOpaqueReflOfVar definedSymbols) <$> eqs
+    varsToConsider = S.unions $
+      S.filter toConsider .
+      (\(v, _, eq) -> getFreeVarsOfReflectionOfVar v eq) <$> eqs
     -- Main function: creates a (dummy) measure about a given variable
     transformVar :: Ghc.Var -> Bare.Lookup (MSpec SpecType Ghc.DataCon, (Ghc.Var, Measure LocBareType ctor))
     transformVar var = do
@@ -424,20 +426,19 @@ makeOpaqueReflMeasures env measEnv tycEnv specs eqs = do
         bmeas = M locSym bareType [] MsReflect []
         smeas = M locSym (val specType) [] MsReflect []
 
--- Get the set of "free" symbols in the (reflection of the) unfolding of a given variable. Free symbols are those that are not
--- already in the logic and that appear in the reflection of the unfolding.
--- For this purpose, you need to give a set of defined variables, the
--- variable naming the definition to reflect and its corresponding
--- equation in the logic.
-getOpaqueReflOfVar  :: S.HashSet LocSymbol -> Ghc.Var -> LocSpecType -> F.Equation -> S.HashSet Ghc.Var
-getOpaqueReflOfVar definedSymbols var _ eq = S.filter toConsider varsInLogic
+-- Get the set of "free" symbols in the (reflection of the) unfolding of a given variable.
+-- Free symbols are those that are not already in the logic and that appear in
+-- the reflection of the unfolding.
+-- For this purpose, you need to give the variable naming the definition to reflect
+-- and its corresponding equation in the logic.
+getFreeVarsOfReflectionOfVar  :: Ghc.Var -> F.Equation -> S.HashSet Ghc.Var
+getFreeVarsOfReflectionOfVar var eq = 
+    S.filter (\v -> F.symbol v `S.member` freeSymbolsInReflectedBody) freeVarsInCoreExpr
   where
     reflExpr = getUnfolding var
     getAllFreeVars = Ghc.exprSomeFreeVarsList (const True)
-    allVars = maybe S.empty (S.fromList . getAllFreeVars) reflExpr
-    symsInLogic = F.exprSymbolsSet (F.eqBody eq)
-    varsInLogic = S.filter (\v -> F.symbol v `S.member` symsInLogic) allVars
-    toConsider v = Ghc.isExportedId v && not (S.member (varLocSym v) definedSymbols)
+    freeVarsInCoreExpr = maybe S.empty (S.fromList . getAllFreeVars) reflExpr
+    freeSymbolsInReflectedBody = F.exprSymbolsSet (F.eqBody eq)
     getUnfolding = getExpr . Ghc.realUnfoldingInfo . Ghc.idInfo
     getExpr :: Ghc.Unfolding -> Maybe Ghc.CoreExpr
     getExpr (Ghc.CoreUnfolding expr _ _ _ _) = Just expr
