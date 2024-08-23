@@ -425,7 +425,7 @@ makeOpaqueReflMeasures env measEnv tycEnv specs eqs = do
         smeas = M locSym (val specType) [] MsReflect []
 
 -- Get the set of "free" symbols in the (reflection of the) unfolding of a given variable. Free symbols are those that are not
--- already in the logic and that appear in the reflection of the unfolding but do not appear in the set of defined variables.
+-- already in the logic and that appear in the reflection of the unfolding.
 -- For this purpose, you need to give a set of defined variables, the
 -- variable naming the definition to reflect and its corresponding
 -- equation in the logic.
