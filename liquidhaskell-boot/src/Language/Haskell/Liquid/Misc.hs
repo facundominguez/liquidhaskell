@@ -201,6 +201,7 @@ zipWithDef _ xs     []     = xs
 zipWithDef _ []     ys     = ys
 zipWithDef f (x:xs) (y:ys) = f x y : zipWithDef f xs ys
 
+
 --------------------------------------------------------------------------------
 -- Originally part of Fixpoint's Misc:
 --------------------------------------------------------------------------------
