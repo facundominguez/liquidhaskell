@@ -1,3 +1,7 @@
+-- Checking the behavior of opaque reflection in case two imported modules (B and C here) opaque reflected
+-- the same module from a common import D. The two opaque reflections of the same variable should be merged
+-- and considered the same.
+
 {-@ LIQUID "--reflection" @-}
 {-@ LIQUID "--ple" @-}
 {-@ LIQUID "--save" @-}

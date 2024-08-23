@@ -369,9 +369,14 @@ makeMeasureSpec env sigEnv myName (name, spec)
 getLocReflects :: Maybe Bare.Env -> Bare.ModSpecs -> S.HashSet F.LocSymbol
 getLocReflects mbEnv = S.unions . fmap (uncurry $ names mbEnv) . M.toList
   where
-    names (Just env) modName z = Bare.qualifyLocSymbolTop env modName `S.map` unqualified z
-    names Nothing _ z = unqualified z
-    unqualified z = S.unions [ Ms.reflects z, S.fromList (snd <$> Ms.asmReflectSigs z), S.fromList (fst <$> Ms.asmReflectSigs z), Ms.inlines z, Ms.hmeas z ]
+    names (Just env) modName modSpec = Bare.qualifyLocSymbolTop env modName `S.map` unqualified modSpec
+    names Nothing _ modSpec = unqualified modSpec
+    unqualified modSpec = S.unions
+      [ Ms.reflects modSpec
+      , S.fromList (snd <$> Ms.asmReflectSigs modSpec)
+      , S.fromList (fst <$> Ms.asmReflectSigs modSpec)
+      , Ms.inlines modSpec, Ms.hmeas modSpec
+      ]
 
 ----------------------------------------------------
 -- Looks at the given list of equations and finds any undefined symbol in the logic,
@@ -393,10 +398,15 @@ makeOpaqueReflMeasures env measEnv tycEnv specs eqs = do
       `S.union` measVars -- Get the data constructors, ex. for Lit00.0
       `S.union` S.unions (uncurry getDataDecls <$> specsList) -- get the Predicated type defs, ex. for T1669.CSemigroup
       `S.union` S.unions (getAliases . snd <$> specsList) -- aliases, ex. for T1738Lib.incr
-    getFromAxioms modName spec = S.fromList $ Bare.qualifyLocSymbolTop env modName . localize . F.eqName <$> Ms.axeqs spec
+    getFromAxioms modName spec = S.fromList $
+      Bare.qualifyLocSymbolTop env modName . localize . F.eqName <$> Ms.axeqs spec
     measVars     = S.fromList $ localize . fst <$> getMeasVars env measEnv
-    getDataDecls modName spec = S.unions $ getFromDataCtor modName <$> concat (tycDCons `Mb.mapMaybe` (dataDecls spec ++ newtyDecls spec))
-    getFromDataCtor modName decl = S.fromList $ Bare.qualifyLocSymbolTop env modName <$> (dcName decl : (localize . fst <$> dcFields decl))
+    getDataDecls modName spec = S.unions $
+      getFromDataCtor modName <$>
+        concat (tycDCons `Mb.mapMaybe` (dataDecls spec ++ newtyDecls spec))
+    getFromDataCtor modName decl = S.fromList $
+      Bare.qualifyLocSymbolTop env modName <$>
+        (dcName decl : (localize . fst <$> dcFields decl))
     getAliases spec = S.fromList $ fmap rtName <$> Ms.ealiases spec
     localize :: F.Symbol -> F.LocSymbol
     localize sym = maybe (dummyLoc sym) varLocSym $ L.lookup sym (Bare.reSyms env)
@@ -416,13 +426,14 @@ makeOpaqueReflMeasures env measEnv tycEnv specs eqs = do
 
 -- Get the set of "free" symbols in the (reflection of the) unfolding of a given variable. Free symbols are those that are not
 -- already in the logic and that appear in the reflection of the unfolding but do not appear in the set of defined variables.
--- For this purpose, you need to give a set of defined variables, the variable whose definition you want to unfold and its corresponding
+-- For this purpose, you need to give a set of defined variables, the
+-- variable naming the definition to reflect and its corresponding
 -- equation in the logic.
 getOpaqueReflOfVar  :: S.HashSet LocSymbol -> Ghc.Var -> LocSpecType -> F.Equation -> S.HashSet Ghc.Var
 getOpaqueReflOfVar definedSymbols var _ eq = S.filter toConsider varsInLogic
   where
     reflExpr = getUnfolding var
-    allVars = maybe S.empty GM.collectAllVars reflExpr
+    allVars = maybe S.empty GM.collectAllFreeVars reflExpr
     symsInLogic = F.exprSymbolsSet (F.eqBody eq)
     varsInLogic = S.filter (\v -> F.symbol v `S.member` symsInLogic) allVars
     toConsider v = Ghc.isExportedId v && not (S.member (varLocSym v) definedSymbols)

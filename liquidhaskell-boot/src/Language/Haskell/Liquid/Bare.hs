@@ -739,13 +739,15 @@ addReflSigs env tycEnv name rtEnv measEnv refl sig =
     -- after, which is why we put the opaque reflection first in the chain. The signatures for opaque reflections are created
     -- using the part of the pipeline of assume-reflect, namely the strengthening of post-conditions.
     myGsAsmSigs = M.toList $
-        M.fromList (Misc.tripleToPair <$> (createUpdatedSpecs . fst) `Mb.mapMaybe` Bare.meOpaqueRefl measEnv)
+        M.fromList ((createUpdatedSpecs . fst) `Mb.mapMaybe` Bare.meOpaqueRefl measEnv)
         `M.union` M.fromList (filter notReflected (gsAsmSigs sig))
         `M.union` M.fromList wreflSigs
     embs                    = Bare.tcEmbs       tycEnv
     -- Strengthen the post-condition to each of the opaque reflections. Actual and pretended here are the actual function and
     -- the uninterpreted one (the measure)
-    createUpdatedSpecs var = Bare.makeAssumeReflectAxiom sig env embs name (Just var, Just var) (varLocSym var, varLocSym var)
+    createUpdatedSpecs var = tripleToPair <$> Bare.makeAssumeReflectAxiom sig env embs name (Just var, Just var) (varLocSym var, varLocSym var)
+    tripleToPair :: (a, b, c) -> (a, b)
+    tripleToPair (a, b, _) = (a, b)
     -- See T1738. We need to expand and qualify any reflected signature /here/, after any
     -- relevant binder has been detected and \"promoted\". The problem stems from the fact that any input
     -- 'BareSpec' will have a 'reflects' list of binders to reflect under the form of an opaque 'Var', that

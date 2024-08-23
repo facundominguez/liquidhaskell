@@ -1,4 +1,4 @@
--- | test if basic LH pipeline is functioning 
+-- | test if basic opaque reflection is functioning
 
 {-@ LIQUID "--reflection"      @-}
 

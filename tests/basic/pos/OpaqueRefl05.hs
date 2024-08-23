@@ -1,3 +1,5 @@
+-- Checking the post-condition of opaque-reflection: it should link the opaque-reflected function with the generated measure
+
 module OpaqueRefl05 where
 
 import Data.Char (ord, chr)

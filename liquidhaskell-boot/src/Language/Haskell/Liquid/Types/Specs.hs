@@ -423,7 +423,9 @@ data Spec ty bndr  = Spec
   , pragmas    :: ![F.Located String]                                 -- ^ Command-line configurations passed in through source
   , cmeasures  :: ![Measure ty ()]                                    -- ^ Measures attached to a type-class
   , imeasures  :: ![Measure ty bndr]                                  -- ^ Mappings from (measure,type) -> measure
-  , omeasures  :: ![Measure ty bndr]                                  -- ^ Opaque reflection measures. Separate field bc measures are checked for duplicates.
+  , omeasures  :: ![Measure ty bndr]                                  -- ^ Opaque reflection measures.
+  -- Separate field bc measures are checked for duplicates, and we want to allow for opaque-reflected measures to be duplicated.
+  -- See Note [Duplicate measures and opaque reflection] in "Language.Haskell.Liquid.Measure".
   , classes    :: ![RClass ty]                                        -- ^ Refined Type-Classes
   , claws      :: ![RClass ty]                                        -- ^ Refined Type-Classe Laws
   , relational :: ![(LocSymbol, LocSymbol, ty, ty, RelExpr, RelExpr)] -- ^ Relational types
