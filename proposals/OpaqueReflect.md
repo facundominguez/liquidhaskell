@@ -1,6 +1,6 @@
 # Specification of opaque reflection
 
-This spec addresses #1892. The goal is to permit the reflection of functions which contain symbols that are not already in the logic, through the automatic lifting of the symbols which are not in the logic, as uninterpreted functions.
+This spec addresses #1892. The goal is to permit the reflection of functions which contain symbols that are not already in the logic, through the automatic lifting of the symbols which are not in the logic, as uninterpreted functions. In this document, we use "uninterpreted functions" and "measures" interchangeably.
 
 The idea behind issue #1892 is that you may want to reflect a function without reflecting all the functions that are in the definition. For example, `Data.Map.lookup` may not be necessarily reflected for a function containing it to be reflected and reasoned about. Currently, the process of adding a dummy measure for functions we don't want to reflect is done manually and is often required. Such that it would be preferable to make opaque-reflection a default behavior, if no reflection is available for the symbol. In particular, because it allows the reflection of functions using imported symbols, that may not have been reflected there in the first place.
 
@@ -18,7 +18,7 @@ keepEvens :: [Int] -> [Int]
 keepEvens = filter even
 ```
 
-It will introduce measures for filter and even, such that the result would be equivalent to
+It will introduce measures for `filter` and `even`, such that the result would be equivalent to
 
 ```Haskell
 {-@ LIQUID "--reflection"      @-}
@@ -55,7 +55,7 @@ Would become:
 
 The measure can bear the same name as the original function, since the symbol was unbounded in the logic before (otherwise we would not perform opaque reflection in the first place). Whence `filter` in the post-condition truly refers to the measure and not the Haskell function.
 
-If the user wishes to see what functions were opaque reflected, they can use the `--dump-opaque-reflections` pragma. It will list in the stdout the functions for which a measure was introduced automatically by opaque reflection. An example output for the following code is:
+If the user wishes to see what functions were opaque reflected, they can use the `--dump-opaque-reflections` pragma. It will list in the stdout the functions for which a measure was introduced automatically by opaque reflection. The functions are alphabetically ordered. An example output for the following code is:
 
 ```Haskell
 {-@ LIQUID "--reflection"      @-}
@@ -69,7 +69,9 @@ keepEvens = filter even
 ```
 
 ```
-Opaque reflections: [GHC.Internal.List.filter,GHC.Internal.Real.even]
+Opaque reflections: 
+- GHC.Internal.List.filter
+- GHC.Internal.Real.even
 ```
 
 ### Postcondition
