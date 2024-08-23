@@ -72,7 +72,6 @@ mkMSpec ms cms ims oms = MSpec cm mm cmm ims
     cm     = groupMap (val . ctor) $ concatMap msEqns (ms'++ims)
     mm     = M.fromList [(msName m, m) | m <- ms' ]
     cmm    = M.fromList [(msName m, m) | m <- cms ]
-    -- See Note [Duplicate measures and opaque reflection] in "Language.Haskell.Liquid.Measure".
     ms'    = checkDuplicateMeasure ms ++ oms
 
 
