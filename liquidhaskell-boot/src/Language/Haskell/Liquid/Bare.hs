@@ -260,7 +260,12 @@ makeGhcSpec0 cfg src lmap mspecsNoCls = do
   -- Dump reflections, if requested
   when (dumpOpaqueReflections cfg) . Ghc.liftIO $ do
     putStrLn ""
-    putStrLn $ "Opaque reflections: " ++ show (fst <$> Bare.meOpaqueRefl measEnv)
+    if L.null (Bare.meOpaqueRefl measEnv) then do
+      putStrLn "No opaque reflection was generated."
+    else do
+      putStrLn "Opaque reflections: "
+      let sortedRefls = L.sort $ fst <$> Bare.meOpaqueRefl measEnv
+      mapM_ (putStrLn . ("- " ++) . show) sortedRefls
     putStrLn ""
 
   pure (diags, SP
