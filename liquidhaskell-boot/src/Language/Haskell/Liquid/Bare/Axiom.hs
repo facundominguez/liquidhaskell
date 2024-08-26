@@ -102,12 +102,11 @@ makeAssumeReflectAxiom sig env tce name (mbActualV, mbPretendedV) (actual, prete
   let -- Expression of the equation. It is just saying that the actual and pretended functions are the same
       -- when applied to the same arguments
       le    = foldl F.EApp (F.EVar qPretended) (F.EVar . fst <$> xArgs)
-      ref   = F.Reft (F.vv_, F.PAtom F.Eq (F.EVar F.vv_) le)
 
       actualEq = F.mkEquation qActual xArgs le out
    -- The actual and pretended function must have the same type
   if pretendedTy == actualTy then
-    Just (actualV, actual {val = aty_at `strengthenRes` ref} , actualEq)
+    Just (actualV, actual {val = aty_at} , actualEq)
   else
     Ex.throw $ mkError actual $
       show qPretended ++ " and " ++ show qActual ++ " should have the same type. But " ++
@@ -138,7 +137,7 @@ makeAssumeReflectAxiom sig env tce name (mbActualV, mbPretendedV) (actual, prete
                 trep{ty_info = fmap (\i -> i{permitTC = Just allowTC}) ty_info}) .
             toRTypeRep $ Mb.fromMaybe (ofType actualTy) mbT
     -- Decompose the function type into arguments and return types
-    at    = axiomType allowTC actual rt
+    at    = axiomType allowTC pretended{val = qPretended} rt
     aty_at = aty at
     -- The return type of the function
     out   = rTypeSort tce $ ares at
