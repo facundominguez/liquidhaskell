@@ -99,19 +99,15 @@ makeAssumeReflectAxiom :: GhcSpecSig -> Bare.Env -> F.TCEmb Ghc.TyCon -> ModName
                        -> Maybe (Ghc.Var, LocSpecType, F.Equation)
 -----------------------------------------------------------------------------------------------
 makeAssumeReflectAxiom sig env tce name (mbActualV, mbPretendedV) (actual, pretended) = do
-  args <- mbArgs
   let -- Expression of the equation. It is just saying that the actual and pretended functions are the same
       -- when applied to the same arguments
-      le    = foldl F.EApp (F.EVar qPretended) (F.EVar . fst <$> args)
+      le    = foldl F.EApp (F.EVar qPretended) (F.EVar . fst <$> xArgs)
       ref   = F.Reft (F.vv_, F.PAtom F.Eq (F.EVar F.vv_) le)
-      -- Substitute our argument names with the actual arguments given from `xArgs`
-      -- in the final, refined type
-      su         = F.mkSubst $ zip (fst <$> args) xArgs
 
-      actualEq = F.mkEquation qActual args le out
-  -- The actual and pretended function must have the same type
+      actualEq = F.mkEquation qActual xArgs le out
+   -- The actual and pretended function must have the same type
   if pretendedTy == actualTy then
-    Just (actualV, actual {val = aty_at `strengthenRes` F.subst su ref} , actualEq)
+    Just (actualV, actual {val = aty_at `strengthenRes` ref} , actualEq)
   else
     Ex.throw $ mkError actual $
       show qPretended ++ " and " ++ show qActual ++ " should have the same type. But " ++
@@ -130,21 +126,6 @@ makeAssumeReflectAxiom sig env tce name (mbActualV, mbPretendedV) (actual, prete
     -- Get the GHC type of the actual and pretended functions
     actualTy = Ghc.varType actualV
     pretendedTy = Ghc.varType pretendedV
-    -- Compute argument names for the actual/pretended functions
-    -- The argument names are lq1, lq2, etc.
-    -- These argument names will be used in the equation
-    mbArgs = getArgs 1 actualTy
-    -- Function types can be of multiple sorts. We are only interested in the Type -> Type (i.e., ->) ones,
-    -- which correspond to flag Ghc.FTF_T_T. For (=>) Constraint -> Type (flag FTF_C_T), we just ignore the
-    -- (constraint) argument. For the others kinds, we throw are error, as they are unsupported.
-    getArgs :: Int -> Ghc.Type -> Maybe [(F.Symbol, F.Sort)]
-    getArgs n Ghc.FunTy{ft_arg=ty0, ft_res=ty1, ft_af=Ghc.FTF_T_T} = do
-      recRes <- getArgs (n+1) ty1
-      return $ (F.symbol . ("lq" ++) . show $ n, typeSort tce ty0) : recRes
-    getArgs n Ghc.FunTy{ft_res=ty1, ft_af=Ghc.FTF_C_T} = getArgs n ty1
-    getArgs _ Ghc.FunTy{} = Nothing
-    getArgs n (Ghc.ForAllTy _ ty) = getArgs n ty
-    getArgs _ _ = Just []
 
     -- Compute the refined type of the actual function. See `makeAssumeType` for details
     sigs                    = gsTySigs sig ++ gsAsmSigs sig -- We also look into assumed signatures
@@ -162,7 +143,7 @@ makeAssumeReflectAxiom sig env tce name (mbActualV, mbPretendedV) (actual, prete
     -- The return type of the function
     out   = rTypeSort tce $ ares at
     -- The arguments names and types, as given by `AxiomType`
-    xArgs = F.EVar . fst <$> aargs at
+    xArgs = fmap (rTypeSort tce) <$> aargs at
     allowTC = typeclass (getConfig env)
 
 getReflectDefs :: GhcSrc -> GhcSpecSig -> Ms.BareSpec
