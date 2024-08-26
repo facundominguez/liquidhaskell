@@ -104,14 +104,17 @@ makeAssumeReflectAxiom sig env tce name (mbActualV, mbPretendedV) (actual, prete
       le    = foldl F.EApp (F.EVar qPretended) (F.EVar . fst <$> xArgs)
 
       actualEq = F.mkEquation qActual xArgs le out
+
    -- The actual and pretended function must have the same type
   if pretendedTy == actualTy then
-    Just (actualV, actual {val = aty_at} , actualEq)
+    Just (actualV, actual{val = aty at}, actualEq)
   else
     Ex.throw $ mkError actual $
       show qPretended ++ " and " ++ show qActual ++ " should have the same type. But " ++
       "types " ++ F.showpp pretendedTy ++ " and " ++ F.showpp actualTy  ++ " do not match."
   where
+    at = strengthenSpecWithMeasure sig env actualV pretended{val=qPretended}
+
     -- Get the Ghc.Var's of the actual and pretended function names
     actualV = Mb.fromMaybe (case Bare.lookupGhcVar env name "wiredAxioms" actual of
       Right x -> x
@@ -126,6 +129,22 @@ makeAssumeReflectAxiom sig env tce name (mbActualV, mbPretendedV) (actual, prete
     actualTy = Ghc.varType actualV
     pretendedTy = Ghc.varType pretendedV
 
+    -- The return type of the function
+    out   = rTypeSort tce $ ares at
+    -- The arguments names and types, as given by `AxiomType`
+    xArgs = fmap (rTypeSort tce) <$> aargs at
+
+strengthenSpecWithMeasure :: GhcSpecSig -> Bare.Env
+                       -> Ghc.Var -- var owning the spec
+                       -> LocSymbol     -- measure name
+                       -> AxiomType
+-----------------------------------------------------------------------------------------------
+strengthenSpecWithMeasure sig env actualV qPretended =
+    axiomType allowTC qPretended rt
+  where
+    -- Get the GHC type of the actual and pretended functions
+    actualTy = Ghc.varType actualV
+
     -- Compute the refined type of the actual function. See `makeAssumeType` for details
     sigs                    = gsTySigs sig ++ gsAsmSigs sig -- We also look into assumed signatures
     -- Try to get the specification of the actual function from the signatures
@@ -136,13 +155,6 @@ makeAssumeReflectAxiom sig env tce name (mbActualV, mbPretendedV) (actual, prete
             (\trep@RTypeRep{..} ->
                 trep{ty_info = fmap (\i -> i{permitTC = Just allowTC}) ty_info}) .
             toRTypeRep $ Mb.fromMaybe (ofType actualTy) mbT
-    -- Decompose the function type into arguments and return types
-    at    = axiomType allowTC pretended{val = qPretended} rt
-    aty_at = aty at
-    -- The return type of the function
-    out   = rTypeSort tce $ ares at
-    -- The arguments names and types, as given by `AxiomType`
-    xArgs = fmap (rTypeSort tce) <$> aargs at
     allowTC = typeclass (getConfig env)
 
 getReflectDefs :: GhcSrc -> GhcSpecSig -> Ms.BareSpec
