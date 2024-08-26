@@ -377,26 +377,17 @@ getLocReflects mbEnv = S.unions . fmap (uncurry $ names mbEnv) . M.toList
       , Ms.inlines modSpec, Ms.hmeas modSpec
       ]
 
-----------------------------------------------------
--- Looks at the given list of equations and finds any undefined symbol in the logic,
--- for which we need to introduce an opaque reflection.
--- Returns the corresponding measures. Second part of the returned tuple is the information to save
--- to the `meOpaqueRefl` field of the measure environment.
-makeOpaqueReflMeasures :: Bare.Env -> Bare.MeasEnv -> Bare.TycEnv -> Bare.ModSpecs ->
-              [(Ghc.Var, LocSpecType, F.Equation)] ->
-               Bare.Lookup ([MSpec SpecType Ghc.DataCon], [(Ghc.Var, Measure LocBareType ctor)])
-makeOpaqueReflMeasures env measEnv tycEnv specs eqs = do
-  res <- mapM transformVar $ S.toList varsToConsider
-  return $ unzip res
+-- Get all the symbols that are defined in the logic, based on the environment and the specs.
+-- Also, fully qualify the defined symbols by the way (for those for which it's possible and not already done).
+getDefinedSymbolsInLogic :: Bare.Env -> Bare.MeasEnv -> Bare.ModSpecs -> S.HashSet F.LocSymbol
+getDefinedSymbolsInLogic env measEnv specs = 
+  S.unions (uncurry getFromAxioms <$> specsList) -- reflections that ended up in equations
+    `S.union` getLocReflects (Just env) specs -- reflected symbols
+    `S.union` measVars -- Get the data constructors, ex. for Lit00.0
+    `S.union` S.unions (uncurry getDataDecls <$> specsList) -- get the Predicated type defs, ex. for T1669.CSemigroup
+    `S.union` S.unions (getAliases . snd <$> specsList) -- aliases, ex. for T1738Lib.incr
   where
     specsList = M.toList specs
-    -- Get all the defined symbols. Also, fully qualify them by the way (for those for which it's possible and not already done).
-    definedSymbols =
-      S.unions (uncurry getFromAxioms <$> specsList) -- reflections that ended up in equations
-      `S.union` getLocReflects (Just env) specs -- reflected symbols
-      `S.union` measVars -- Get the data constructors, ex. for Lit00.0
-      `S.union` S.unions (uncurry getDataDecls <$> specsList) -- get the Predicated type defs, ex. for T1669.CSemigroup
-      `S.union` S.unions (getAliases . snd <$> specsList) -- aliases, ex. for T1738Lib.incr
     getFromAxioms modName spec = S.fromList $
       Bare.qualifyLocSymbolTop env modName . localize . F.eqName <$> Ms.axeqs spec
     measVars     = S.fromList $ localize . fst <$> getMeasVars env measEnv
@@ -409,16 +400,28 @@ makeOpaqueReflMeasures env measEnv tycEnv specs eqs = do
     getAliases spec = S.fromList $ fmap rtName <$> Ms.ealiases spec
     localize :: F.Symbol -> F.LocSymbol
     localize sym = maybe (dummyLoc sym) varLocSym $ L.lookup sym (Bare.reSyms env)
-    toConsider v = not (S.member (varLocSym v) definedSymbols)
+
+----------------------------------------------------
+-- Looks at the given list of equations and finds any undefined symbol in the logic,
+-- for which we need to introduce an opaque reflection.
+-- Returns the corresponding measures. Second part of the returned tuple is the information to save
+-- to the `meOpaqueRefl` field of the measure environment.
+makeOpaqueReflMeasures :: Bare.Env -> Bare.MeasEnv -> Bare.ModSpecs ->
+              [(Ghc.Var, LocSpecType, F.Equation)] ->
+              ([MSpec SpecType Ghc.DataCon], [(Ghc.Var, Measure LocBareType ctor)])
+makeOpaqueReflMeasures env measEnv specs eqs =
+  unzip $ createMeasureForVar <$> S.toList varsUndefinedInLogic
+  where
+    definedSymbols = getDefinedSymbolsInLogic env measEnv specs
+    undefinedInLogic v = not (S.member (varLocSym v) definedSymbols)
     -- Variables to consider
-    varsToConsider = S.unions $
-      S.filter toConsider .
+    varsUndefinedInLogic = S.unions $
+      S.filter undefinedInLogic .
       (\(v, _, eq) -> getFreeVarsOfReflectionOfVar v eq) <$> eqs
     -- Main function: creates a (dummy) measure about a given variable
-    transformVar :: Ghc.Var -> Bare.Lookup (MSpec SpecType Ghc.DataCon, (Ghc.Var, Measure LocBareType ctor))
-    transformVar var = do
-      mspec <- mkMeasureDCon env (Bare.tcName tycEnv) (Ms.mkMSpec' [smeas])
-      return (mspec, (var, bmeas))
+    createMeasureForVar :: Ghc.Var -> (MSpec SpecType Ghc.DataCon, (Ghc.Var, Measure LocBareType ctor))
+    createMeasureForVar var =
+      (Ms.mkMSpec' [smeas], (var, bmeas))
       where
         locSym = F.atLoc (loc specType) (F.symbol var)
         specType = varSpecType var

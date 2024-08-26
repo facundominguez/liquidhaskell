@@ -248,14 +248,14 @@ makeGhcSpec0 cfg src lmap mspecsNoCls = do
                else pure sig
   let (dg3, refl)    = withDiagnostics $ makeSpecRefl cfg src measEnv0 specs env name elaboratedSig tycEnv
   let eqs            = gsHAxioms refl
-  let (dg4, measEnv) = withDiagnostics $ addOpaqueReflMeas env tycEnv measEnv0 specs eqs
+  let measEnv = addOpaqueReflMeas env measEnv0 specs eqs
   let qual     = makeSpecQual cfg env tycEnv measEnv rtEnv specs
-  let (dg5, spcVars) = withDiagnostics $ makeSpecVars cfg src mySpec env measEnv
-  let (dg6, spcTerm) = withDiagnostics $ makeSpecTerm cfg     mySpec env       name
+  let (dg4, spcVars) = withDiagnostics $ makeSpecVars cfg src mySpec env measEnv
+  let (dg5, spcTerm) = withDiagnostics $ makeSpecTerm cfg     mySpec env       name
   let sData    = makeSpecData  src env sigEnv measEnv elaboratedSig specs
   let laws     = makeSpecLaws env sigEnv (gsTySigs elaboratedSig ++ gsAsmSigs elaboratedSig) measEnv specs
   let finalLiftedSpec = makeLiftedSpec name src env refl sData elaboratedSig qual myRTE lSpec1
-  let diags    = mconcat [dg0, dg1, dg2, dg3, dg4, dg5, dg6]
+  let diags    = mconcat [dg0, dg1, dg2, dg3, dg4, dg5]
 
   -- Dump reflections, if requested
   when (dumpOpaqueReflections cfg) . Ghc.liftIO $ do
@@ -724,7 +724,7 @@ addReflSigs :: Bare.Env -> Bare.TycEnv -> ModName -> BareRTEnv -> Bare.MeasEnv -
 ------------------------------------------------------------------------------------------
 addReflSigs env tycEnv name rtEnv measEnv refl sig =
   sig { gsRefSigs = F.notracepp ("gsRefSigs for " ++ F.showpp name) $ map expandReflectedSignature reflSigs
-      , gsAsmSigs = F.notracepp ("gsAsmSigs for " ++ F.showpp name) myGsAsmSigs
+      , gsAsmSigs = F.notracepp ("gsAsmSigs for " ++ F.showpp name) combinedOpaqueAndReflectedAndWiredAsmSigs
       }
   where
     -- We make sure that the reflected functions are excluded from `gsAsmSigs`, except for the signatures of
@@ -738,7 +738,7 @@ addReflSigs env tycEnv name rtEnv measEnv refl sig =
     -- Based on `M.union`'s handling of duplicates, the leftmost elements in the chain of `M.union` will precede over those
     -- after, which is why we put the opaque reflection first in the chain. The signatures for opaque reflections are created
     -- using the part of the pipeline of assume-reflect, namely the strengthening of post-conditions.
-    myGsAsmSigs = M.toList $
+    combinedOpaqueAndReflectedAndWiredAsmSigs = M.toList $
         M.fromList ((createUpdatedSpecs . fst) `Mb.mapMaybe` Bare.meOpaqueRefl measEnv)
         `M.union` M.fromList (filter notReflected (gsAsmSigs sig))
         `M.union` M.fromList wreflSigs
@@ -1265,7 +1265,7 @@ makeMeasEnv env tycEnv sigEnv specs = do
   let measures = mconcat (Ms.mkMSpec' dcSelectors : measures0)
   let (cs, ms) = Bare.makeMeasureSpec'  (typeclass $ getConfig env)   measures
   let cms      = Bare.makeClassMeasureSpec measures
-  let cms'     = [ (x, Loc l l' $ cSort t)  | (Loc l l' x, t) <- cms ]
+  let cms'     = [ (val l, cSort t <$ l)  | (l, t) <- cms ]
   let ms'      = [ (F.val lx, F.atLoc lx t) | (lx, t) <- ms
                                             , Mb.isNothing (lookup (val lx) cms') ]
   let cs'      = [ (v, txRefs v t) | (v, t) <- Bare.meetDataConSpec (typeclass (getConfig env)) embs cs (datacons ++ cls)]
@@ -1289,23 +1289,20 @@ makeMeasEnv env tycEnv sigEnv specs = do
 
 -------------------------------------------------------------------------------------------
 --- Add the opaque reflections to the measure environment
---- Returns a new environement that is the old one enhanced with the opaque reflections
+--- Returns a new environment that is the old one enhanced with the opaque reflections
 -------------------------------------------------------------------------------------------
-addOpaqueReflMeas :: Bare.Env -> Bare.TycEnv -> Bare.MeasEnv -> Bare.ModSpecs ->
+addOpaqueReflMeas :: Bare.Env -> Bare.MeasEnv -> Bare.ModSpecs ->
                [(Ghc.Var, LocSpecType, F.Equation)] ->
-               Bare.Lookup Bare.MeasEnv
+               Bare.MeasEnv
 -------------------------------------------------------------------------------------------
-addOpaqueReflMeas env tycEnv measEnv specs eqs = do
-  (measures0, opaqueRefl)   <- Bare.makeOpaqueReflMeasures env measEnv tycEnv specs eqs
+addOpaqueReflMeas env measEnv specs eqs = do
+  let (measures0, opaqueRefl) = Bare.makeOpaqueReflMeasures env measEnv specs eqs
   -- Rest of the code is the same idea as for makeMeasEnv, only we just care on how to get
   -- `meSyms` (no class, data constructor or other stuff here).
   let measures = mconcat measures0
   let (_, ms) = Bare.makeMeasureSpec'  (typeclass $ getConfig env)   measures
-  let cms      = Bare.makeClassMeasureSpec measures
-  let cms'     = [ (x, Loc l l' $ cSort t)  | (Loc l l' x, t) <- cms ]
-  let ms'      = [ (F.val lx, F.atLoc lx t) | (lx, t) <- ms
-                                            , Mb.isNothing (lookup (val lx) cms') ]
-  return $ measEnv <> mempty
+  let ms'      = [ (F.val lx, F.atLoc lx t) | (lx, t) <- ms ]
+  measEnv <> mempty
     { Bare.meMeasureSpec = measures
     , Bare.meSyms        = ms'
     , Bare.meOpaqueRefl  = opaqueRefl
