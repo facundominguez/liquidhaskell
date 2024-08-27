@@ -116,10 +116,10 @@ makeAssumeReflectAxiom sig env tce name (mbActualV, mbPretendedV) (actual, prete
     at = val $ strengthenSpecWithMeasure sig env actualV pretended{val=qPretended}
 
     -- Get the Ghc.Var's of the actual and pretended function names
-    actualV = Mb.fromMaybe (case Bare.lookupGhcVar env name "wiredAxioms" actual of
+    actualV = Mb.fromMaybe (case Bare.lookupGhcVar env name "assume-reflection" actual of
       Right x -> x
       Left _ -> Ex.throw $ mkError actual $ "Not in scope: " ++ show (val actual)) mbActualV
-    pretendedV = Mb.fromMaybe (case Bare.lookupGhcVar env name "wiredAxioms" pretended of
+    pretendedV = Mb.fromMaybe (case Bare.lookupGhcVar env name "assume-reflection" pretended of
       Right x -> x
       Left _ -> Ex.throw $ mkError pretended $ "Not in scope: " ++ show (val pretended)) mbPretendedV
     -- Get the qualified name symbols for the actual and pretended functions

@@ -811,7 +811,7 @@ makeSpecSig cfg name specs env sigEnv tycEnv measEnv cbs = do
     mySpec     = M.lookupDefault mempty name specs
     allSpecs   = M.toList specs
     rtEnv      = Bare.sigRTEnv sigEnv
-    getVar sym = case Bare.lookupGhcVar env name "wiredAxioms" sym of
+    getVar sym = case Bare.lookupGhcVar env name "assume-reflection specs" sym of
       Right x -> x
       Left _ -> Ex.throw $ mkError sym $ "Not in scope: " ++ show (val sym)
 
