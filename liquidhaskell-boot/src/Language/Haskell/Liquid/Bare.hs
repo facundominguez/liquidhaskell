@@ -271,7 +271,7 @@ makeGhcSpec0 cfg src lmap mspecsNoCls = do
   pure (diags, SP
     { _gsConfig = cfg
     , _gsImps   = makeImports mspecs
-    , _gsSig    = addReflSigs env tycEnv name rtEnv measEnv refl elaboratedSig
+    , _gsSig    = addReflSigs env name rtEnv measEnv refl elaboratedSig
     , _gsRefl   = refl
     , _gsLaws   = laws
     , _gsData   = sData
@@ -720,9 +720,9 @@ getReflects  = fmap val . S.toList . Bare.getLocReflects Nothing
 -- | @updateReflSpecSig@ uses the information about reflected functions (included the opaque ones) to update the
 --   "assumed" signatures.
 ------------------------------------------------------------------------------------------
-addReflSigs :: Bare.Env -> Bare.TycEnv -> ModName -> BareRTEnv -> Bare.MeasEnv -> GhcSpecRefl -> GhcSpecSig -> GhcSpecSig
+addReflSigs :: Bare.Env -> ModName -> BareRTEnv -> Bare.MeasEnv -> GhcSpecRefl -> GhcSpecSig -> GhcSpecSig
 ------------------------------------------------------------------------------------------
-addReflSigs env tycEnv name rtEnv measEnv refl sig =
+addReflSigs env name rtEnv measEnv refl sig =
   sig { gsRefSigs = F.notracepp ("gsRefSigs for " ++ F.showpp name) $ map expandReflectedSignature reflSigs
       , gsAsmSigs = F.notracepp ("gsAsmSigs for " ++ F.showpp name) combinedOpaqueAndReflectedAndWiredAsmSigs
       }
@@ -737,17 +737,13 @@ addReflSigs env tycEnv name rtEnv measEnv refl sig =
     -- We may redefine assumptions because of opaque reflections, so we just take the union of maps and ignore duplicates.
     -- Based on `M.union`'s handling of duplicates, the leftmost elements in the chain of `M.union` will precede over those
     -- after, which is why we put the opaque reflection first in the chain. The signatures for opaque reflections are created
-    -- using the part of the pipeline of assume-reflect, namely the strengthening of post-conditions.
+    -- by strengthening the post-conditions, as in (assume-)reflection.
     combinedOpaqueAndReflectedAndWiredAsmSigs = M.toList $
-        M.fromList ((createUpdatedSpecs . fst) `Mb.mapMaybe` Bare.meOpaqueRefl measEnv)
+        M.fromList ((createUpdatedSpecs . fst) <$> Bare.meOpaqueRefl measEnv)
         `M.union` M.fromList (filter notReflected (gsAsmSigs sig))
         `M.union` M.fromList wreflSigs
-    embs                    = Bare.tcEmbs       tycEnv
-    -- Strengthen the post-condition to each of the opaque reflections. Actual and pretended here are the actual function and
-    -- the uninterpreted one (the measure)
-    createUpdatedSpecs var = tripleToPair <$> Bare.makeAssumeReflectAxiom sig env embs name (Just var, Just var) (varLocSym var, varLocSym var)
-    tripleToPair :: (a, b, c) -> (a, b)
-    tripleToPair (a, b, _) = (a, b)
+    -- Strengthen the post-condition of each of the opaque reflections.
+    createUpdatedSpecs var = (var, Bare.aty <$> Bare.strengthenSpecWithMeasure sig env var (varLocSym var))
     -- See T1738. We need to expand and qualify any reflected signature /here/, after any
     -- relevant binder has been detected and \"promoted\". The problem stems from the fact that any input
     -- 'BareSpec' will have a 'reflects' list of binders to reflect under the form of an opaque 'Var', that

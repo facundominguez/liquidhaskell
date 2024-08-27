@@ -8,7 +8,7 @@
 -- | This module contains the code that DOES reflection; i.e. converts Haskell
 --   definitions into refinements.
 
-module Language.Haskell.Liquid.Bare.Axiom ( makeHaskellAxioms, makeAssumeReflectAxiom, makeAssumeReflectAxioms, wiredReflects ) where
+module Language.Haskell.Liquid.Bare.Axiom ( makeHaskellAxioms, strengthenSpecWithMeasure, makeAssumeReflectAxioms, wiredReflects, AxiomType(..) ) where
 
 import Prelude hiding (error)
 import Prelude hiding (mapM)
@@ -113,7 +113,7 @@ makeAssumeReflectAxiom sig env tce name (mbActualV, mbPretendedV) (actual, prete
       show qPretended ++ " and " ++ show qActual ++ " should have the same type. But " ++
       "types " ++ F.showpp pretendedTy ++ " and " ++ F.showpp actualTy  ++ " do not match."
   where
-    at = strengthenSpecWithMeasure sig env actualV pretended{val=qPretended}
+    at = val $ strengthenSpecWithMeasure sig env actualV pretended{val=qPretended}
 
     -- Get the Ghc.Var's of the actual and pretended function names
     actualV = Mb.fromMaybe (case Bare.lookupGhcVar env name "wiredAxioms" actual of
@@ -137,10 +137,10 @@ makeAssumeReflectAxiom sig env tce name (mbActualV, mbPretendedV) (actual, prete
 strengthenSpecWithMeasure :: GhcSpecSig -> Bare.Env
                        -> Ghc.Var -- var owning the spec
                        -> LocSymbol     -- measure name
-                       -> AxiomType
+                       -> Located AxiomType
 -----------------------------------------------------------------------------------------------
 strengthenSpecWithMeasure sig env actualV qPretended =
-    axiomType allowTC qPretended rt
+    qPretended{ val = axiomType allowTC qPretended rt}
   where
     -- Get the GHC type of the actual and pretended functions
     actualTy = Ghc.varType actualV
