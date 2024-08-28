@@ -159,7 +159,7 @@ myIsDigit x = '0' <= x && x <= '9'
 
 ### Opaque reflection
 
-LH automatically introduces uninterpreted functions / measures for all symbols which appear in the expression of a variable to reflect,
+LH automatically introduces uninterpreted functions / measures for all symbols which appear in the expression to reflect,
 but which are not already defined in the refinement logic. However, if you want to see exactly which symbols will be *opaque-reflected*
 (that's the term for it), you use this pragma:
 
@@ -182,7 +182,9 @@ keepEvens = filter even
 ```
 
 ```
-Opaque reflections: [GHC.Internal.List.filter,GHC.Internal.Real.even]
+Opaque reflections:
+- GHC.Internal.List.filter
+- GHC.Internal.Real.even
 ```
 
 ## Fast Checking
