@@ -739,7 +739,7 @@ addReflSigs env name rtEnv measEnv refl sig =
     -- after, which is why we put the opaque reflection first in the chain. The signatures for opaque reflections are created
     -- by strengthening the post-conditions, as in (assume-)reflection.
     combinedOpaqueAndReflectedAndWiredAsmSigs = M.toList $
-        M.fromList ((createUpdatedSpecs . fst) <$> Bare.meOpaqueRefl measEnv)
+        M.fromList (createUpdatedSpecs . fst <$> Bare.meOpaqueRefl measEnv)
         `M.union` M.fromList (filter notReflected (gsAsmSigs sig))
         `M.union` M.fromList wreflSigs
     -- Strengthen the post-condition of each of the opaque reflections.
