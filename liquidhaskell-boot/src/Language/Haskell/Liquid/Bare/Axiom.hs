@@ -81,9 +81,7 @@ makeAssumeReflectAxioms src env tycEnv name spSig spec = do
     Just (x , y) -> Ex.throw $ mkError y $ "Duplicate reflection of " ++ show x ++ " and " ++ show y
     Nothing -> return $ turnIntoAxiom <$> Ms.asmReflectSigs spec
   where
-    turnIntoAxiom (actual, pretended) = case makeAssumeReflectAxiom spSig env embs name (Nothing, Nothing) (actual, pretended) of
-      Just v -> v
-      Nothing -> Ex.throw $ mkError actual $ "This function cannot be `assume reflect`'ed. Its signature is too complex for me."
+    turnIntoAxiom (actual, pretended) = makeAssumeReflectAxiom spSig env embs name (actual, pretended)
     refDefs                 = getReflectDefs src spSig spec
     embs                    = Bare.tcEmbs       tycEnv
     refSymbols              = fst4 <$> refDefs
@@ -94,20 +92,13 @@ makeAssumeReflectAxioms src env tycEnv name spSig spec = do
 -- `makeAssumeReflectAxioms`. Can also be used to compute the updated SpecType of            --
 -- a type where we add the post-condition that actual and pretended are the same             --
 makeAssumeReflectAxiom :: GhcSpecSig -> Bare.Env -> F.TCEmb Ghc.TyCon -> ModName
-                       -> (Maybe Ghc.Var, Maybe Ghc.Var) -- actual function and pretended function variables
                        -> (LocSymbol, LocSymbol) -- actual function and pretended function
-                       -> Maybe (Ghc.Var, LocSpecType, F.Equation)
+                       -> (Ghc.Var, LocSpecType, F.Equation)
 -----------------------------------------------------------------------------------------------
-makeAssumeReflectAxiom sig env tce name (mbActualV, mbPretendedV) (actual, pretended) = do
-  let -- Expression of the equation. It is just saying that the actual and pretended functions are the same
-      -- when applied to the same arguments
-      le    = foldl F.EApp (F.EVar qPretended) (F.EVar . fst <$> xArgs)
-
-      actualEq = F.mkEquation qActual xArgs le out
-
+makeAssumeReflectAxiom sig env tce name (actual, pretended) =
    -- The actual and pretended function must have the same type
   if pretendedTy == actualTy then
-    Just (actualV, actual{val = aty at}, actualEq)
+    (actualV, actual{val = aty at}, actualEq)
   else
     Ex.throw $ mkError actual $
       show qPretended ++ " and " ++ show qActual ++ " should have the same type. But " ++
@@ -116,12 +107,12 @@ makeAssumeReflectAxiom sig env tce name (mbActualV, mbPretendedV) (actual, prete
     at = val $ strengthenSpecWithMeasure sig env actualV pretended{val=qPretended}
 
     -- Get the Ghc.Var's of the actual and pretended function names
-    actualV = Mb.fromMaybe (case Bare.lookupGhcVar env name "assume-reflection" actual of
+    actualV = case Bare.lookupGhcVar env name "assume-reflection" actual of
       Right x -> x
-      Left _ -> Ex.throw $ mkError actual $ "Not in scope: " ++ show (val actual)) mbActualV
-    pretendedV = Mb.fromMaybe (case Bare.lookupGhcVar env name "assume-reflection" pretended of
+      Left _ -> Ex.throw $ mkError actual $ "Not in scope: " ++ show (val actual)
+    pretendedV = case Bare.lookupGhcVar env name "assume-reflection" pretended of
       Right x -> x
-      Left _ -> Ex.throw $ mkError pretended $ "Not in scope: " ++ show (val pretended)) mbPretendedV
+      Left _ -> Ex.throw $ mkError pretended $ "Not in scope: " ++ show (val pretended)
     -- Get the qualified name symbols for the actual and pretended functions
     qActual = Bare.qualifyTop env name (F.loc actual) (val actual)
     qPretended = Bare.qualifyTop env name (F.loc pretended) (val pretended)
@@ -133,6 +124,12 @@ makeAssumeReflectAxiom sig env tce name (mbActualV, mbPretendedV) (actual, prete
     out   = rTypeSort tce $ ares at
     -- The arguments names and types, as given by `AxiomType`
     xArgs = fmap (rTypeSort tce) <$> aargs at
+
+    -- Expression of the equation. It is just saying that the actual and pretended functions are the same
+    -- when applied to the same arguments
+    le    = foldl F.EApp (F.EVar qPretended) (F.EVar . fst <$> xArgs)
+
+    actualEq = F.mkEquation qActual xArgs le out
 
 strengthenSpecWithMeasure :: GhcSpecSig -> Bare.Env
                        -> Ghc.Var -- var owning the spec
