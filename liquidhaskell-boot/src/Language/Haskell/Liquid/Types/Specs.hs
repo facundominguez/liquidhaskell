@@ -414,6 +414,7 @@ data Spec ty bndr  = Spec
   , rewriteWith :: !(M.HashMap F.LocSymbol [F.LocSymbol])             -- ^ Definitions using rewrite rules
   , fails      :: !(S.HashSet F.LocSymbol)                            -- ^ These Functions should be unsafe
   , reflects   :: !(S.HashSet F.LocSymbol)                            -- ^ Binders to reflect
+  , opaqueReflects :: !(S.HashSet F.LocSymbol)                        -- ^ Binders to opaque-reflect
   , autois     :: !(M.HashMap F.LocSymbol (Maybe Int))                -- ^ Automatically instantiate axioms in these Functions with maybe specified fuel
   , hmeas      :: !(S.HashSet F.LocSymbol)                            -- ^ Binders to turn into measures using haskell definitions
   , hbounds    :: !(S.HashSet F.LocSymbol)                            -- ^ Binders to turn into bounds using haskell definitions
@@ -492,6 +493,7 @@ instance Semigroup (Spec ty bndr) where
            , rewriteWith = M.union  (rewriteWith s1)  (rewriteWith s2)
            , fails      = S.union   (fails    s1)  (fails    s2)
            , reflects   = S.union   (reflects s1)  (reflects s2)
+           , opaqueReflects   = S.union   (opaqueReflects s1)  (opaqueReflects s2)
            , hmeas      = S.union   (hmeas    s1)  (hmeas    s2)
            , hbounds    = S.union   (hbounds  s1)  (hbounds  s2)
            , inlines    = S.union   (inlines  s1)  (inlines  s2)
@@ -531,6 +533,7 @@ instance Monoid (Spec ty bndr) where
            , autois     = M.empty
            , hmeas      = S.empty
            , reflects   = S.empty
+           , opaqueReflects = S.empty
            , hbounds    = S.empty
            , inlines    = S.empty
            , ignores    = S.empty
@@ -885,6 +888,7 @@ unsafeFromLiftedSpec a = Spec
   , rewrites   = mempty
   , rewriteWith = mempty
   , reflects   = mempty
+  , opaqueReflects   = mempty
   , autois     = liftedAutois a
   , hmeas      = mempty
   , hbounds    = mempty

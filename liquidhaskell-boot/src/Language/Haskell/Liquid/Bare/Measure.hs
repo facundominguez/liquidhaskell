@@ -410,8 +410,15 @@ makeOpaqueReflMeasures :: Bare.Env -> Bare.MeasEnv -> Bare.ModSpecs ->
               [(Ghc.Var, LocSpecType, F.Equation)] ->
               ([MSpec SpecType Ghc.DataCon], [(Ghc.Var, Measure LocBareType ctor)])
 makeOpaqueReflMeasures env measEnv specs eqs =
-  unzip $ createMeasureForVar <$> S.toList varsUndefinedInLogic
+  unzip $ createMeasureForVar <$> S.toList (varsUndefinedInLogic `S.union` requestedOpaqueRefl)
   where
+    -- Get the set of variables for the requested opaque reflections
+    requestedOpaqueRefl = S.unions
+      . fmap (uncurry (S.map . getVar) . second Ms.opaqueReflects)
+      . M.toList $ specs
+    getVar name sym = case Bare.lookupGhcVar env name "opaque-reflection" sym of
+      Right x -> x
+      Left _ -> Ex.throw $ mkError sym $ "Not in scope: " ++ show (val sym)
     definedSymbols = getDefinedSymbolsInLogic env measEnv specs
     undefinedInLogic v = not (S.member (varLocSym v) definedSymbols)
     -- Variables to consider
@@ -428,6 +435,9 @@ makeOpaqueReflMeasures env measEnv specs eqs =
         bareType = varBareType var
         bmeas = M locSym bareType [] MsReflect []
         smeas = M locSym (val specType) [] MsReflect []
+
+mkError :: LocSymbol -> String -> Error
+mkError x str = ErrHMeas (GM.sourcePosSrcSpan $ loc x) (pprint $ val x) (text str)
 
 -- Get the set of "free" symbols in the (reflection of the) unfolding of a given variable.
 -- Free symbols are those that are not already in the logic and that appear in
