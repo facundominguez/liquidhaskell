@@ -1,5 +1,4 @@
 {-@ LIQUID "--reflection" @-}
-{-@ LIQUID "--save" @-}
 
 module OpaqueRefl03C where
 
