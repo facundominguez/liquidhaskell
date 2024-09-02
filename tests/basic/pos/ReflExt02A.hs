@@ -8,3 +8,7 @@ module ReflExt02A where
 import ReflExt02B
 
 {-@ reflect myAdd @-}
+
+-- 3 + 2 + 1 = 6
+{-@ lemma :: {myAdd 3 2 = 6 } @-}
+lemma = ()

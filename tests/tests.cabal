@@ -2219,6 +2219,8 @@ executable basic-pos
                     , ReflExt01
                     , ReflExt02A
                     , ReflExt02B
+                    , ReflExt03A
+                    , ReflExt03B
                     , SkipDerived00
 
     ghc-options:      -fplugin=LiquidHaskell -fkeep-going -O0

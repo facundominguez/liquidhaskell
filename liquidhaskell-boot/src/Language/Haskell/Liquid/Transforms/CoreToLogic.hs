@@ -485,15 +485,25 @@ brels = M.fromList [ (symbol ("==" :: String), Eq)
 
 bops :: M.HashMap Symbol Bop
 bops = M.fromList [ (numSymbol "+", Plus)
+                  , (numIntSymbol "+", Plus)
+                  , (primSymbol "+#", Plus)
                   , (numSymbol "-", Minus)
+                  , (numIntSymbol "-", Minus)
+                  , (primSymbol "-#", Minus)
                   , (numSymbol "*", Times)
+                  , (numIntSymbol "*", Times)
+                  , (primSymbol "*#", Times)
                   , (numSymbol "/", Div)
                   , (realSymbol "/", Div)
                   , (numSymbol "%", Mod)
                   ]
   where
+    primSymbol :: String -> Symbol
+    primSymbol =  symbol . (++) "GHC.Prim."
     numSymbol :: String -> Symbol
     numSymbol =  symbol . (++) "GHC.Internal.Num."
+    numIntSymbol :: String -> Symbol
+    numIntSymbol = numSymbol . (++) "$fNumInt_$c"
     realSymbol :: String -> Symbol
     realSymbol =  symbol . (++) "GHC.Internal.Real."
 
