@@ -703,7 +703,12 @@ makeSpecRefl cfg src menv specs env name sig tycEnv = do
   where
     lawMethods   = F.notracepp "Law Methods" $ concatMap Ghc.classMethods (fst <$> Bare.meCLaws menv)
     mySpec       = M.lookupDefault mempty name specs
-    rflSyms      = S.fromList (getReflects specs)
+    -- Collect reflected symbols and fully qualify them
+    rflSyms      = S.fromList $ qualifySym . localize <$> (getReflects specs)
+    localize :: F.Symbol -> F.LocSymbol
+    localize sym = maybe (dummyLoc sym) Bare.varLocSym $ L.lookup sym (Bare.reSyms env)
+    modName      = _giTargetMod src
+    qualifySym l = Bare.qualifyTop env modName (loc l) (val l)
     lmap         = Bare.reLMap env
     notInReflOnes (_, a) = not $ a `S.member` Ms.reflects mySpec
     anyNonReflFn = L.find notInReflOnes (Ms.asmReflectSigs mySpec)
@@ -711,7 +716,7 @@ makeSpecRefl cfg src menv specs env name sig tycEnv = do
 isReflectVar :: S.HashSet F.Symbol -> Ghc.Var -> Bool
 isReflectVar reflSyms v = S.member vx reflSyms
   where
-    vx                  = GM.dropModuleNames (symbol v)
+    vx                  = symbol v
 
 getReflects :: Bare.ModSpecs -> [Symbol]
 getReflects  = fmap val . S.toList . Bare.getLocReflects Nothing
@@ -743,7 +748,7 @@ addReflSigs env name rtEnv measEnv refl sig =
         `M.union` M.fromList (filter notReflected (gsAsmSigs sig))
         `M.union` M.fromList wreflSigs
     -- Strengthen the post-condition of each of the opaque reflections.
-    createUpdatedSpecs var = (var, Bare.aty <$> Bare.strengthenSpecWithMeasure sig env var (varLocSym var))
+    createUpdatedSpecs var = (var, Bare.aty <$> Bare.strengthenSpecWithMeasure sig env var (Bare.varLocSym var))
     -- See T1738. We need to expand and qualify any reflected signature /here/, after any
     -- relevant binder has been detected and \"promoted\". The problem stems from the fact that any input
     -- 'BareSpec' will have a 'reflects' list of binders to reflect under the form of an opaque 'Var', that
@@ -1317,7 +1322,7 @@ makeLiftedSpec name src _env refl sData sig qual myRTE lSpec0 = lSpec0
   { Ms.asmSigs    = F.notracepp   ("makeLiftedSpec : ASSUMED-SIGS " ++ F.showpp name ) (xbs ++ myDCs)
   , Ms.reflSigs   = F.notracepp "REFL-SIGS"         xbs
   , Ms.sigs       = F.notracepp   ("makeLiftedSpec : LIFTED-SIGS " ++ F.showpp name )  $ mkSigs (gsTySigs sig)
-  , Ms.invariants = [ (varLocSym <$> x, Bare.specToBare <$> t)
+  , Ms.invariants = [ (Bare.varLocSym <$> x, Bare.specToBare <$> t)
                        | (x, t) <- gsInvariants sData
                        , isLocInFile srcF t
                     ]
@@ -1332,7 +1337,7 @@ makeLiftedSpec name src _env refl sData sig qual myRTE lSpec0 = lSpec0
     mkSigs xts    = [ toBare (x, t) | (x, t) <- xts
                     ,  S.member x sigVars && isExportedVar (toTargetSrc src) x
                     ]
-    toBare (x, t) = (varLocSym x, Bare.specToBare <$> t)
+    toBare (x, t) = (Bare.varLocSym x, Bare.specToBare <$> t)
     xbs           = toBare <$> reflTySigs
     sigVars       = S.difference defVars reflVars
     defVars       = S.fromList (_giDefVars src)
@@ -1358,9 +1363,6 @@ isLocInFile f lx = f == lifted || isCompanion
 
 locFile :: (F.Loc a) => a -> FilePath
 locFile = Misc.fst3 . F.sourcePosElts . F.sp_start . F.srcSpan
-
-varLocSym :: Ghc.Var -> LocSymbol
-varLocSym v = F.symbol <$> GM.locNamedThing v
 
 -- makeSpecRTAliases :: Bare.Env -> BareRTEnv -> [Located SpecRTAlias]
 -- makeSpecRTAliases _env _rtEnv = [] -- TODO-REBARE

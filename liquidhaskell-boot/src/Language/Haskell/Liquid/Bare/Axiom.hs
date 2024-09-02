@@ -33,11 +33,13 @@ import           Language.Haskell.Liquid.Types
 
 import           Language.Haskell.Liquid.Bare.Resolve as Bare
 import           Language.Haskell.Liquid.Bare.Types   as Bare
+import           Language.Haskell.Liquid.Bare.Measure as Bare
 import qualified Data.List as L
 import Language.Haskell.Liquid.Misc (fst4)
 import Control.Applicative
 import Data.Function (on)
 import qualified Data.Map as Map
+import qualified Data.HashMap.Strict as M
 
 findDuplicatePair :: Ord k => (a -> k) -> [a] -> Maybe (a, a)
 findDuplicatePair key xs =
@@ -156,31 +158,57 @@ strengthenSpecWithMeasure sig env actualV qPretended =
 
 getReflectDefs :: GhcSrc -> GhcSpecSig -> Ms.BareSpec -> Bare.Env -> ModName
                -> [(LocSymbol, Maybe SpecType, Ghc.Var, Ghc.CoreExpr)]
-getReflectDefs src sig spec env modName = findVarDefType cbs sigs env modName <$> xs
+getReflectDefs src sig spec env modName = go initialXs initialDefined []
   where
     sigs                    = gsTySigs sig
-    xs                      = S.toList (Ms.reflects spec)
+    initialXs               = S.toList (Ms.reflects spec)
     cbs                     = _giCbs src
+    initialDefined          = M.empty
 
-findVarDefType :: [Ghc.CoreBind] -> [(Ghc.Var, LocSpecType)] -> Bare.Env -> ModName -> LocSymbol
-               -> (LocSymbol, Maybe SpecType, Ghc.Var, Ghc.CoreExpr)
-findVarDefType cbs sigs env modName x = case findVarDefMethod (val x) cbs of
+    go :: [LocSymbol] -> M.HashMap LocSymbol Ghc.Var 
+       -> [(LocSymbol, Maybe SpecType, Ghc.Var, Ghc.CoreExpr)] 
+       -> [(LocSymbol, Maybe SpecType, Ghc.Var, Ghc.CoreExpr)]
+    go [] _ acc = acc
+    go xs defined acc = if null found
+         then case newXs of
+                [] -> acc
+                x:_ -> Ex.throw . mkError x $
+                  "Not found in scope nor in the amongst these variables: " ++
+                    foldr (\x acc -> acc ++ " , " ++ show x) "" newDefined
+         else go newXs newDefined newAcc
+      where
+        results   = findVarDefType cbs sigs env modName defined <$> xs
+        found     = Mb.catMaybes results
+        newAcc    = acc ++ found
+        newDefined = foldl addFreeVarsToMap defined found
+        newXs     = [x | (x, Nothing) <- zip xs results]
+
+    addFreeVarsToMap defined (_, _, _, expr) =
+      let freeVarsSet = getAllFreeVars expr
+          newBindings = M.fromList [(Bare.varLocSym var, var) | var <- S.toList freeVarsSet]
+      in M.union defined newBindings
+
+    getAllFreeVars = S.fromList . Ghc.exprSomeFreeVarsList (const True)
+
+findVarDefType :: [Ghc.CoreBind] -> [(Ghc.Var, LocSpecType)] -> Bare.Env -> ModName
+               -> M.HashMap LocSymbol Ghc.Var -> LocSymbol
+               -> Maybe (LocSymbol, Maybe SpecType, Ghc.Var, Ghc.CoreExpr)
+findVarDefType cbs sigs env modName defs x = case findVarDefMethod (val x) cbs of
   -- YL: probably ok even without checking typeclass flag since user cannot
   -- manually reflect internal names
   Just (v, e) -> if GM.isExternalId v || isMethod (F.symbol x) || isDictionary (F.symbol x)
-                   then (x, val <$> lookup v sigs, v, e)
+                   then Just (x, val <$> lookup v sigs, v, e)
                    else Ex.throw $ mkError x ("Lifted functions must be exported; please export " ++ show v)
-  Nothing     ->
+  Nothing     -> do
+    var <- Bare.maybeResolveSym env modName "findVarDefType" qSym <|> M.lookup qSym defs
+    let info = Ghc.idInfo var
+    let unfolding = getExpr . Ghc.realUnfoldingInfo $ info
     case unfolding of
-      Just e -> (x, val <$> lookup var sigs, var, e)
+      Just e -> Just (x, val <$> lookup var sigs, var, e)
       _ -> Ex.throw $ mkError x "Symbol exists but is not defined in the current file, and no unfolding is available in the interface files"
   where
+    qSym = x {val = qualifySym x}
     qualifySym l = Bare.qualifyTop env modName (loc l) (val l)
-    var = case Bare.maybeResolveSym env modName "findVarDefType" (x {val = qualifySym x}) of
-                Just v -> v
-                _      -> Ex.throw $ mkError x "Not found in scope"
-    info = Ghc.idInfo var
-    unfolding = getExpr . Ghc.realUnfoldingInfo $ info
     getExpr :: Ghc.Unfolding -> Maybe Ghc.CoreExpr
     getExpr (Ghc.CoreUnfolding expr _ _ _ _) = Just expr
     getExpr _ = Nothing

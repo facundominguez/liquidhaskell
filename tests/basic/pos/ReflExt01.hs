@@ -3,7 +3,7 @@
 {-@ LIQUID "--ple"         @-}
 {-@ LIQUID "--reflection" @-}
 
-module ReflExt where
+module ReflExt01 where
 
 {-@ reflect uncurry @-}
 

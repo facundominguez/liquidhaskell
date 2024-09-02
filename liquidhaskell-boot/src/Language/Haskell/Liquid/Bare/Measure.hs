@@ -18,6 +18,7 @@ module Language.Haskell.Liquid.Bare.Measure
   , getMeasVars
   , makeClassMeasureSpec
   -- , makeHaskellBounds
+  , varLocSym
   ) where
 
 import Data.Default

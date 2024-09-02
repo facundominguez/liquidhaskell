@@ -176,7 +176,7 @@ customDynFlags opts hscEnv = do
          -- https://gitlab.haskell.org/ghc/ghc/-/issues/24386
          `gopt_set` Opt_InsertBreakpoints
          -- Ignore-interface-pragmas need to be unset to have access to
-         -- the RHS unfoldings in the `Ghc.Var`s
+         -- the RHS unfoldings in the `Ghc.Var`s which is
          -- needed as part of the reflection of foreign functions in the logic
          `gopt_unset` Opt_IgnoreInterfacePragmas
          `xopt_set` MagicHash
