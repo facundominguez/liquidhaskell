@@ -248,14 +248,14 @@ makeGhcSpec0 cfg src lmap mspecsNoCls = do
                else pure sig
   let (dg3, refl)    = withDiagnostics $ makeSpecRefl cfg src measEnv0 specs env name elaboratedSig tycEnv
   let eqs            = gsHAxioms refl
-  let measEnv = addOpaqueReflMeas env measEnv0 specs eqs
+  let (dg4, measEnv) = withDiagnostics $ addOpaqueReflMeas cfg tycEnv env mySpec measEnv0 specs eqs
   let qual     = makeSpecQual cfg env tycEnv measEnv rtEnv specs
-  let (dg4, spcVars) = withDiagnostics $ makeSpecVars cfg src mySpec env measEnv
-  let (dg5, spcTerm) = withDiagnostics $ makeSpecTerm cfg     mySpec env       name
+  let (dg5, spcVars) = withDiagnostics $ makeSpecVars cfg src mySpec env measEnv
+  let (dg6, spcTerm) = withDiagnostics $ makeSpecTerm cfg     mySpec env       name
   let sData    = makeSpecData  src env sigEnv measEnv elaboratedSig specs
   let laws     = makeSpecLaws env sigEnv (gsTySigs elaboratedSig ++ gsAsmSigs elaboratedSig) measEnv specs
   let finalLiftedSpec = makeLiftedSpec name src env refl sData elaboratedSig qual myRTE lSpec1
-  let diags    = mconcat [dg0, dg1, dg2, dg3, dg4, dg5]
+  let diags    = mconcat [dg0, dg1, dg2, dg3, dg4, dg5, dg6]
 
   -- Dump reflections, if requested
   when (dumpOpaqueReflections cfg) . Ghc.liftIO $ do
@@ -1286,22 +1286,39 @@ makeMeasEnv env tycEnv sigEnv specs = do
 --- Add the opaque reflections to the measure environment
 --- Returns a new environment that is the old one enhanced with the opaque reflections
 -------------------------------------------------------------------------------------------
-addOpaqueReflMeas :: Bare.Env -> Bare.MeasEnv -> Bare.ModSpecs ->
+addOpaqueReflMeas :: Config -> Bare.TycEnv -> Bare.Env -> Ms.BareSpec -> Bare.MeasEnv -> Bare.ModSpecs ->
                [(Ghc.Var, LocSpecType, F.Equation)] ->
-               Bare.MeasEnv
--------------------------------------------------------------------------------------------
-addOpaqueReflMeas env measEnv specs eqs = do
-  let (measures0, opaqueRefl) = Bare.makeOpaqueReflMeasures env measEnv specs eqs
+               Bare.Lookup Bare.MeasEnv
+----------------------- --------------------------------------------------------------------
+addOpaqueReflMeas cfg tycEnv env spec measEnv specs eqs = do
+  dcs   <- snd <$> Bare.makeConTypes'' env name spec dataDecls []
+  let datacons      = Bare.makePluggedDataCon (typeclass cfg) embs tyi <$> (concat dcs)
+  let dcSelectors   = concatMap (Bare.makeMeasureSelectors cfg dm) datacons
   -- Rest of the code is the same idea as for makeMeasEnv, only we just care on how to get
   -- `meSyms` (no class, data constructor or other stuff here).
-  let measures = mconcat measures0
-  let (_, ms) = Bare.makeMeasureSpec'  (typeclass $ getConfig env)   measures
+  let measures = mconcat (Ms.mkMSpec' dcSelectors : measures0)
+  let (cs, ms) = Bare.makeMeasureSpec'  (typeclass $ getConfig env)   measures
   let ms'      = [ (F.val lx, F.atLoc lx t) | (lx, t) <- ms ]
-  measEnv <> mempty
+  let cs'      = [ (v, txRefs v t) | (v, t) <- Bare.meetDataConSpec (typeclass (getConfig env)) embs cs (val <$> datacons)]
+  return $ measEnv <> mempty
     { Bare.meMeasureSpec = measures
     , Bare.meSyms        = ms'
+    , Bare.meDataCons    = cs'
     , Bare.meOpaqueRefl  = opaqueRefl
     }
+  where
+    -- We compute things in the same way as in makeMeasEnv
+    txRefs v t    = Bare.txRefSort tyi embs (t <$ GM.locNamedThing v)
+    (measures0, opaqueRefl) = Bare.makeOpaqueReflMeasures env measEnv specs eqs
+    -- Note: it is important to do toList after applying `dataConTyCon` because
+    -- obviously several data constructors can refer to the same `TyCon` so we
+    -- could have duplicates
+    tcs = S.toList $ Ghc.dataConTyCon `S.map` Bare.getOpaqueReflDCs measEnv eqs
+    dataDecls = Bare.makeHaskellDataDecls cfg name spec tcs
+    tyi           = Bare.tcTyConMap    tycEnv
+    embs          = Bare.tcEmbs        tycEnv
+    dm            = Bare.tcDataConMap  tycEnv
+    name          = Bare.tcName        tycEnv
 
 -----------------------------------------------------------------------------------------
 -- | @makeLiftedSpec@ is used to generate the BareSpec object that should be serialized
