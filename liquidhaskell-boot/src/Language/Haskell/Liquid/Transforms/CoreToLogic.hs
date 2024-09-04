@@ -483,6 +483,11 @@ brels = M.fromList [ (symbol ("==" :: String), Eq)
                    , (symbol ("<" :: String) , Lt)
                    ]
 
+-- bops is a map between GHC function names/symbols and binary operators
+-- from the logic. We want GHC functions like +, -, etc. to bed mapped to the
+-- corresponding operators. There are actually multiple sources for +, -,
+-- they can come from GHC.Prim, GHC.Internal.Num, GHC.Internal.Real or
+-- be an instance of Num for Int.
 bops :: M.HashMap Symbol Bop
 bops = M.fromList [ (numSymbol "+", Plus)
                   , (numIntSymbol "+", Plus)

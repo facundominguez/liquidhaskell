@@ -156,33 +156,55 @@ strengthenSpecWithMeasure sig env actualV qPretended =
             toRTypeRep $ Mb.fromMaybe (ofType actualTy) mbT
     allowTC = typeclass (getConfig env)
 
+-- Gets the definitions of all the symbols that `BareSpec` wants to reflect.
+-- 
+-- Because we allow to name private variables here, not all symbols can easily
+-- be turned into `Ghc.Var`. Essentially, `findVarDefType` can initially only
+-- fetch the definitions of public variables. We use a fixpoint so that for each
+-- newly retrieved definition, we get the list of variables used inside it and record them in a
+-- HashMap so that in the next round, we might be able to get more definitions
+-- (because once you have a variable, it's easy to get its unfolding).
+--
+-- Iterates until no new definition is found. In which case, we fail
+-- if there are still symbols left which we failed to find the source for.
 getReflectDefs :: GhcSrc -> GhcSpecSig -> Ms.BareSpec -> Bare.Env -> ModName
                -> [(LocSymbol, Maybe SpecType, Ghc.Var, Ghc.CoreExpr)]
-getReflectDefs src sig spec env modName = go initialXs initialDefined []
+getReflectDefs src sig spec env modName =
+  fix initialToProcess initialDefinedMap []
   where
     sigs                    = gsTySigs sig
-    initialXs               = S.toList (Ms.reflects spec)
+    initialToProcess               = S.toList (Ms.reflects spec)
     cbs                     = _giCbs src
-    initialDefined          = M.empty
+    initialDefinedMap          = M.empty
 
-    go :: [LocSymbol] -> M.HashMap LocSymbol Ghc.Var 
-       -> [(LocSymbol, Maybe SpecType, Ghc.Var, Ghc.CoreExpr)] 
-       -> [(LocSymbol, Maybe SpecType, Ghc.Var, Ghc.CoreExpr)]
-    go [] _ acc = acc
-    go xs defined acc = if null found
-         then case newXs of
+    -- First argument of the `fix` function should always decrease
+    -- Base case: No one left to process - we're good
+    fix [] _ acc = acc
+    -- Recursive case: there are some left.
+    fix xs definedMap acc = if null found
+         then case newToProcess of
+                -- No one newly found but no one left to process - we're good
                 [] -> acc
+                -- No one newly found but at least one symbol left - we throw an error
                 x:_ -> Ex.throw . mkError x $
                   "Not found in scope nor in the amongst these variables: " ++
                     foldr (\x acc -> acc ++ " , " ++ show x) "" newDefined
-         else go newXs newDefined newAcc
+         else fix newToProcess newDefined newAcc
       where
-        results   = findVarDefType cbs sigs env modName defined <$> xs
+        -- Try to get the definitions of the symbols that are left (`xs`)
+        results   = findVarDefType cbs sigs env modName definedMap <$> xs
+        -- Collect the newly found definitions
         found     = Mb.catMaybes results
+        -- Add them to the accumulator
         newAcc    = acc ++ found
-        newDefined = foldl addFreeVarsToMap defined found
-        newXs     = [x | (x, Nothing) <- zip xs results]
+        -- Add any variable occurrence in them to the `defined` hashmap
+        newDefined = foldl addFreeVarsToMap definedMap found
+        -- Collect all the symbols that still failed to be resolved in this iteration
+        newToProcess     = [x | (x, Nothing) <- zip xs results]
 
+    -- Collects the free variables in an expression and inserts them to the provided map between
+    -- symbols and variables. Especially useful to collect private variables, since it's the only way
+    -- to reach them (seeing them in other unfoldings)
     addFreeVarsToMap defined (_, _, _, expr) =
       let freeVarsSet = getAllFreeVars expr
           newBindings = M.fromList [(Bare.varLocSym var, var) | var <- S.toList freeVarsSet]
@@ -190,6 +212,24 @@ getReflectDefs src sig spec env modName = go initialXs initialDefined []
 
     getAllFreeVars = S.fromList . Ghc.exprSomeFreeVarsList (const True)
 
+-- Finds the definition of a variable. Used for reflection. Returns the same `LocSymbol`
+-- given as argument, the SpecType of this symbol, its corresponding variable and definition
+-- (the `CoreExpr`).
+-- 
+-- Takes as arguments:
+-- - The list of bindings, usually taken from the GhcSrc
+-- - A map of signatures, used to retrieve the `SpecType`
+-- - The current environment, that can be used to resolve symbols
+-- - An extra map between symbols and variables for those symbols that are hard to resolve,
+--   especially if they are private symbols from foreign dependencies. This map will be used
+--   as a fallback if the default resolving mechanism fails.
+-- 
+-- Returns `Nothing` iff the symbol could not be resolved. No error is thrown in this case since this function
+-- is used by the fixpoint mechanism of `getReflectDefs`. Which will collect all the symbols that
+-- could (not) yet be resolved.
+-- 
+-- Errors can be raised whenever the symbol was found but the rest of the process failed (no unfoldings
+-- available, lifted functions not exported, etc.).
 findVarDefType :: [Ghc.CoreBind] -> [(Ghc.Var, LocSpecType)] -> Bare.Env -> ModName
                -> M.HashMap LocSymbol Ghc.Var -> LocSymbol
                -> Maybe (LocSymbol, Maybe SpecType, Ghc.Var, Ghc.CoreExpr)
