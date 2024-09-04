@@ -2159,6 +2159,8 @@ executable basic-neg
                     , Inc04Lib
                     , List00
                     , Poly00
+                    , ReflExt01A
+                    , ReflExt01B
                     , T1459
 
     ghc-options:      -fplugin=LiquidHaskell -fkeep-going -O0
@@ -2221,6 +2223,8 @@ executable basic-pos
                     , ReflExt02B
                     , ReflExt03A
                     , ReflExt03B
+                    , ReflExt04A
+                    , ReflExt04B
                     , SkipDerived00
 
     ghc-options:      -fplugin=LiquidHaskell -fkeep-going -O0

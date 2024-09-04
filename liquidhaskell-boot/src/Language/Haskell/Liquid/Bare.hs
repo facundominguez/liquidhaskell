@@ -704,11 +704,8 @@ makeSpecRefl cfg src menv specs env name sig tycEnv = do
     lawMethods   = F.notracepp "Law Methods" $ concatMap Ghc.classMethods (fst <$> Bare.meCLaws menv)
     mySpec       = M.lookupDefault mempty name specs
     -- Collect reflected symbols and fully qualify them
-    rflSyms      = S.fromList $ qualifySym . localize <$> (getReflects specs)
-    localize :: F.Symbol -> F.LocSymbol
-    localize sym = maybe (dummyLoc sym) Bare.varLocSym $ L.lookup sym (Bare.reSyms env)
-    modName      = _giTargetMod src
-    qualifySym l = Bare.qualifyTop env modName (loc l) (val l)
+    rflLocSyms   = Bare.getLocReflects (Just env) specs
+    rflSyms      = S.map val rflLocSyms
     lmap         = Bare.reLMap env
     notInReflOnes (_, a) = not $ a `S.member` Ms.reflects mySpec
     anyNonReflFn = L.find notInReflOnes (Ms.asmReflectSigs mySpec)
@@ -717,9 +714,6 @@ isReflectVar :: S.HashSet F.Symbol -> Ghc.Var -> Bool
 isReflectVar reflSyms v = S.member vx reflSyms
   where
     vx                  = symbol v
-
-getReflects :: Bare.ModSpecs -> [Symbol]
-getReflects  = fmap val . S.toList . Bare.getLocReflects Nothing
 
 ------------------------------------------------------------------------------------------
 -- | @updateReflSpecSig@ uses the information about reflected functions (included the opaque ones) to update the
