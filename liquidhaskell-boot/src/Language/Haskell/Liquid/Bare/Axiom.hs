@@ -217,7 +217,8 @@ getReflectDefs src sig spec env modName =
 
     getAllFreeVars = S.fromList . Ghc.exprSomeFreeVarsList (const True)
 
--- Finds the definition of a variable. Used for reflection. Returns the same
+-- Finds the definition of a variable in the given Core binds, or in the
+-- unfoldings of a Var. Used for reflection. Returns the same
 -- `LocSymbol` given as argument, the SpecType of this symbol, its corresponding
 -- variable and definition (the `CoreExpr`).
 --
