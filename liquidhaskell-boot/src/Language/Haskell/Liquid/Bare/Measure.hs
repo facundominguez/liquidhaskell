@@ -416,7 +416,7 @@ getReflDCs measEnv vars = dcsUndefinedInLogic
     dcsUndefinedInLogic = S.filter notWired $ allDCInUnfoldings `S.difference` definedDCs
     -- Get the defined DataCons from the measure environement
     definedDCs = S.fromList $ (GM.idDataConM . fst) `Mb.mapMaybe` Bare.meDataCons measEnv
-    allDCInUnfoldings = getDCsOfUnfoldingOfVars $ vars
+    allDCInUnfoldings = getDCsOfUnfoldingOfVars vars
 
 ----------------------------------------------------
 -- Looks at the given list of equations and finds any undefined symbol in the logic,
