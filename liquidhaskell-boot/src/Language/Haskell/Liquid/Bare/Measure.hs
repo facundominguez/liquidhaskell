@@ -481,7 +481,7 @@ getFreeVarsOfReflectionOfVar var eq =
 getDCsOfUnfoldingOfVars :: [Ghc.Var] -> S.HashSet Ghc.DataCon
 getDCsOfUnfoldingOfVars vars = S.unions $ collectDataCons <$> getUnfoldingOfVar `Mb.mapMaybe` vars
 
--- Collect all DataCon used in a Core expression
+-- Collect all DataCon that occur in case split alternatives of an expression
 collectDataCons :: Ghc.CoreExpr -> S.HashSet Ghc.DataCon
 collectDataCons expr = go expr S.empty
   where

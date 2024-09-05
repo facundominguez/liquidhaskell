@@ -392,13 +392,17 @@ makeConTypes myName env specs =
   Misc.concatUnzip <$> mapM (makeConTypes' myName env) specs
 
 
+-- Essentially transforms the data declarations inside the specs
+--- into LH's enhanced types for type constructors and data constructors
 makeConTypes' :: ModName -> Bare.Env -> (ModName, Ms.BareSpec)
              -> Bare.Lookup ([(ModName, TyConP, Maybe DataPropDecl)], [[Located DataConP]])
 makeConTypes' _myName env (name, spec) = makeConTypes'' env name spec dcs vdcs
   where
     dcs  = Ms.dataDecls spec
     vdcs = Ms.dvariance spec
-  
+
+-- Essentially transforms the data declarations into LH's enhanced types for type constructors and
+-- data constructors
 makeConTypes'' :: Bare.Env -> ModName -> Ms.BareSpec -> [DataDecl] -> [(F.LocSymbol, [Variance])]
              -> Bare.Lookup ([(ModName, TyConP, Maybe DataPropDecl)], [[Located DataConP]])
 makeConTypes'' env name spec dcs vdcs = do
