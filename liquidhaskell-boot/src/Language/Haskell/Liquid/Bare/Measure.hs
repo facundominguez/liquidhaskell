@@ -14,7 +14,7 @@ module Language.Haskell.Liquid.Bare.Measure
   , makeMeasureSpec'
   , getLocReflects
   , makeOpaqueReflMeasures
-  , getOpaqueReflDCs
+  , getReflDCs
   , varMeasures
   , getMeasVars
   , makeClassMeasureSpec
@@ -403,16 +403,20 @@ getDefinedSymbolsInLogic env measEnv specs =
     localize :: F.Symbol -> F.LocSymbol
     localize sym = maybe (dummyLoc sym) varLocSym $ L.lookup sym (Bare.reSyms env)
 
-getOpaqueReflDCs :: Bare.MeasEnv ->
-              [(Ghc.Var, LocSpecType, F.Equation)] ->
-              S.HashSet Ghc.DataCon
-getOpaqueReflDCs measEnv eqs = dcsUndefinedInLogic
+-- Get the set of `DataCon`s (DCs) needed for the reflection of a given list of variables,
+-- and which are not already present in the logic
+getReflDCs :: Bare.MeasEnv -> [Ghc.Var] -> S.HashSet Ghc.DataCon
+getReflDCs measEnv vars = dcsUndefinedInLogic
   where
+    -- List of wired DCs that cannot be found in the measure environment yet are already defined/should not be
+    -- reflected. Written as a list of symbols because that's easier than trying to get the corresponding DCs from GHC.
     wired = S.fromList $ F.symbol <$> ["GHC.Types.True", "GHC.Types.False", "GHC.Classes.C:Ord", "GHC.Types.I#"]
-    notInNames dc = not $ GM.qualifiedNameSymbol (Ghc.getName dc) `S.member` wired
-    dcsUndefinedInLogic = S.filter notInNames $ allDCInUnfoldigns `S.difference` definedDCs
+    notWired dc = not $ GM.qualifiedNameSymbol (Ghc.getName dc) `S.member` wired
+    -- Undefined ones are those that are not already defined in the measure environement and are not wired
+    dcsUndefinedInLogic = S.filter notWired $ allDCInUnfoldings `S.difference` definedDCs
+    -- Get the defined DataCons from the measure environement
     definedDCs = S.fromList $ (GM.idDataConM . fst) `Mb.mapMaybe` Bare.meDataCons measEnv
-    allDCInUnfoldigns = getDCsOfUnfoldingOfVars $ Misc.fst3 <$> eqs
+    allDCInUnfoldings = getDCsOfUnfoldingOfVars $ vars
 
 ----------------------------------------------------
 -- Looks at the given list of equations and finds any undefined symbol in the logic,

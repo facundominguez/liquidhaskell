@@ -1292,7 +1292,7 @@ addOpaqueReflMeas :: Config -> Bare.TycEnv -> Bare.Env -> Ms.BareSpec -> Bare.Me
 ----------------------- --------------------------------------------------------------------
 addOpaqueReflMeas cfg tycEnv env spec measEnv specs eqs = do
   dcs   <- snd <$> Bare.makeConTypes'' env name spec dataDecls []
-  let datacons      = Bare.makePluggedDataCon (typeclass cfg) embs tyi <$> (concat dcs)
+  let datacons      = Bare.makePluggedDataCon (typeclass cfg) embs tyi <$> concat dcs
   let dcSelectors   = concatMap (Bare.makeMeasureSelectors cfg dm) datacons
   -- Rest of the code is the same idea as for makeMeasEnv, only we just care on how to get
   -- `meSyms` (no class, data constructor or other stuff here).
@@ -1313,8 +1313,8 @@ addOpaqueReflMeas cfg tycEnv env spec measEnv specs eqs = do
     -- Note: it is important to do toList after applying `dataConTyCon` because
     -- obviously several data constructors can refer to the same `TyCon` so we
     -- could have duplicates
-    tcs = S.toList $ Ghc.dataConTyCon `S.map` Bare.getOpaqueReflDCs measEnv eqs
-    dataDecls = Bare.makeHaskellDataDecls cfg name spec tcs
+    tcs           = S.toList $ Ghc.dataConTyCon `S.map` Bare.getReflDCs measEnv (fst3 <$> eqs)
+    dataDecls     = Bare.makeHaskellDataDecls cfg name spec tcs
     tyi           = Bare.tcTyConMap    tycEnv
     embs          = Bare.tcEmbs        tycEnv
     dm            = Bare.tcDataConMap  tycEnv
