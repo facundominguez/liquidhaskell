@@ -171,49 +171,58 @@ strengthenSpecWithMeasure sig env actualV qPretended =
 getReflectDefs :: GhcSrc -> GhcSpecSig -> Ms.BareSpec -> Bare.Env -> ModName
                -> [(LocSymbol, Maybe SpecType, Ghc.Var, Ghc.CoreExpr)]
 getReflectDefs src sig spec env modName =
-  fix initialToProcess initialDefinedMap []
+  searchInTransitiveClosure symsToResolve initialDefinedMap []
   where
     sigs                    = gsTySigs sig
-    initialToProcess               = S.toList (Ms.reflects spec)
+    symsToResolve           = S.toList (Ms.reflects spec)
     cbs                     = _giCbs src
     initialDefinedMap          = M.empty
 
-    -- First argument of the `fix` function should always decrease
-    -- Base case: No one left to process - we're good
-    fix [] _ acc = acc
+    -- First argument of the `searchInTransitiveClosure` function should always
+    -- decrease.
+    -- The second argument contains the Vars that appear free in the definitions
+    -- of the symbols in the third argument.
+    -- The third argument contains the symbols that have been resolved.
+    --
+    -- The set of symbols in the union of the first and third argument should
+    -- remain constant in every recursive call. Moreover, both arguments are
+    -- disjoint.
+    --
+    -- Base case: No symbols left to resolve - we're good
+    searchInTransitiveClosure [] _ acc = acc
     -- Recursive case: there are some left.
-    fix xs definedMap acc = if null found
-         then case newToProcess of
+    searchInTransitiveClosure toResolve fvMap acc = if null found
+         then case newToResolve of
                 -- No one newly found but no one left to process - we're good
                 [] -> acc
                 -- No one newly found but at least one symbol left - we throw
                 -- an error
                 x:_ -> Ex.throw . mkError x $
                   "Not found in scope nor in the amongst these variables: " ++
-                    foldr (\x acc -> acc ++ " , " ++ show x) "" newDefined
-         else fix newToProcess newDefined newAcc
+                    foldr (\x acc -> acc ++ " , " ++ show x) "" newFvMap
+         else searchInTransitiveClosure newToResolve newFvMap newAcc
       where
-        -- Try to get the definitions of the symbols that are left (`xs`)
-        results   = findVarDefType cbs sigs env modName definedMap <$> xs
+        -- Try to get the definitions of the symbols that are left (`toResolve`)
+        resolvedSyms = findVarDefType cbs sigs env modName fvMap <$> toResolve
         -- Collect the newly found definitions
-        found     = Mb.catMaybes results
+        found     = Mb.catMaybes resolvedSyms
         -- Add them to the accumulator
         newAcc    = acc ++ found
         -- Add any variable occurrence in them to the `defined` hashmap
-        newDefined = foldl addFreeVarsToMap definedMap found
+        newFvMap = foldl addFreeVarsToMap fvMap found
         -- Collect all the symbols that still failed to be resolved in this
         -- iteration
-        newToProcess     = [x | (x, Nothing) <- zip xs results]
+        newToResolve = [x | (x, Nothing) <- zip toResolve resolvedSyms]
 
     -- Collects the free variables in an expression and inserts them to the
     -- provided map between symbols and variables. Especially useful to collect
     -- private variables, since it's the only way to reach them (seeing them in
     -- other unfoldings)
-    addFreeVarsToMap defined (_, _, _, expr) =
+    addFreeVarsToMap fvMap (_, _, _, expr) =
       let freeVarsSet = getAllFreeVars expr
-          newBindings =
+          newVars =
             M.fromList [(Bare.varLocSym var, var) | var <- S.toList freeVarsSet]
-      in M.union defined newBindings
+      in M.union fvMap newVars
 
     getAllFreeVars = S.fromList . Ghc.exprSomeFreeVarsList (const True)
 
