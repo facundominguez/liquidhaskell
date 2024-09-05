@@ -410,6 +410,8 @@ getReflDCs measEnv vars = dcsUndefinedInLogic
   where
     -- List of wired DCs that cannot be found in the measure environment yet are already defined/should not be
     -- reflected. Written as a list of symbols because that's easier than trying to get the corresponding DCs from GHC.
+    -- `GHC.Classes.C:Ord`: for characters (see AssmReflFilter for instance)
+    -- `GHC.Types.I#`: for integers
     wired = S.fromList $ F.symbol <$> ["GHC.Types.True", "GHC.Types.False", "GHC.Classes.C:Ord", "GHC.Types.I#"]
     notWired dc = not $ GM.qualifiedNameSymbol (Ghc.getName dc) `S.member` wired
     -- Undefined ones are those that are not already defined in the measure environement and are not wired
