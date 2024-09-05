@@ -2161,6 +2161,8 @@ executable basic-neg
                     , Poly00
                     , ReflExt01A
                     , ReflExt01B
+                    , ReflExt02A
+                    , ReflExt02B
                     , T1459
 
     ghc-options:      -fplugin=LiquidHaskell -fkeep-going -O0
