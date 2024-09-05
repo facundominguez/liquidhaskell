@@ -221,10 +221,10 @@ getReflectDefs src sig spec env modName =
     addFreeVarsToMap fvMap (_, _, _, expr) =
       let freeVarsSet = getAllFreeVars expr
           newVars =
-            M.fromList [(Bare.varLocSym var, var) | var <- S.toList freeVarsSet]
+            M.fromList [(Bare.varLocSym var, var) | var <- freeVarsSet]
       in M.union fvMap newVars
 
-    getAllFreeVars = S.fromList . Ghc.exprSomeFreeVarsList (const True)
+    getAllFreeVars = Ghc.exprSomeFreeVarsList (const True)
 
 -- Finds the definition of a variable in the given Core binds, or in the
 -- unfoldings of a Var. Used for reflection. Returns the same
