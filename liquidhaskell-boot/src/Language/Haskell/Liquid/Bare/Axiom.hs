@@ -208,7 +208,7 @@ getReflectDefs src sig spec env modName =
         found     = Mb.catMaybes resolvedSyms
         -- Add them to the accumulator
         newAcc    = acc ++ found
-        -- Add any variable occurrence in them to the `defined` hashmap
+        -- Add any variable occurrence in them to `fvMap`
         newFvMap = foldl addFreeVarsToMap fvMap found
         -- Collect all the symbols that still failed to be resolved in this
         -- iteration
