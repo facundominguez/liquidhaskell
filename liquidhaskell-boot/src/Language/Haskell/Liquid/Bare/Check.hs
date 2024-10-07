@@ -36,7 +36,7 @@ import           Language.Fixpoint.SortCheck               (checkSorted, checkSo
 import qualified Language.Fixpoint.Types                   as F
 import qualified Language.Haskell.Liquid.GHC.Misc          as GM
 import           Language.Haskell.Liquid.GHC.Play          (getNonPositivesTyCon)
-import           Language.Haskell.Liquid.Misc              (condNull, thd5)
+import           Language.Haskell.Liquid.Misc              (condNull)
 import           Language.Haskell.Liquid.Types
 import           Language.Haskell.Liquid.WiredIn
 import           Language.Haskell.Liquid.LawInstances      (checkLawInstances)
@@ -505,7 +505,7 @@ checkAppTys = go
     go (RApp rtc ts _ _)
       = checkTcArity rtc (length ts) <|>
         L.foldl' (\merr t -> merr <|> go t) Nothing ts
-    go (RFun _ _ t1 t2 _) = go t1 <|> go t2
+    go (RFun _ _ t1 t2) = go t1 <|> go t2
     go (RVar _ _)       = Nothing
     go (RAllE _ t1 t2)  = go t1 <|> go t2
     go (REx _ t1 t2)    = go t1 <|> go t2
@@ -537,7 +537,7 @@ checkAbstractRefs rt = go rt
     go t@(RAllT _ t1 r)   = check (toRSort t :: RSort) r <|>  go t1
     go (RAllP _ t)        = go t
     go t@(RApp c ts rs r) = check (toRSort t :: RSort) r <|>  efold go ts <|> go' c rs
-    go t@(RFun _ _ t1 t2 r) = check (toRSort t :: RSort) r <|> go t1 <|> go t2
+    go (RFun _ _ t1 t2) = go t1 <|> go t2
     go t@(RVar _ r)       = check (toRSort t :: RSort) r
     go (RAllE _ t1 t2)    = go t1 <|> go t2
     go (REx _ t1 t2)      = go t1 <|> go t2
@@ -637,7 +637,7 @@ checkMBody senv emb _ sort (Def m c _ bs body) = checkMBody' emb sort γ' sp bod
     allowTC = any (fromMaybe False . permitTC) (ty_info $ toRTypeRep sort)
     trep  = toRTypeRep ct
     su    = checkMBodyUnify (ty_res trep) (last txs)
-    txs   = thd5 $ bkArrowDeep sort
+    txs   = (\(_, _, x, _) -> x) $ bkArrowDeep sort
     ct    = ofType $ dataConWrapperType c :: SpecType
 
 checkMBodyUnify
@@ -664,11 +664,10 @@ checkMBody' emb sort γ sp body = case body of
     sort' = dropNArgs 1 sort
 
 dropNArgs :: Int -> RType RTyCon RTyVar r -> RType RTyCon RTyVar r
-dropNArgs i t = fromRTypeRep $ trep {ty_binds = xs, ty_info = is, ty_args = ts, ty_refts = rs}
+dropNArgs i t = fromRTypeRep $ trep {ty_binds = xs, ty_info = is, ty_args = ts}
   where
     xs   = drop i $ ty_binds trep
     ts   = drop i $ ty_args  trep
-    rs   = drop i $ ty_refts trep
     is   = drop i $ ty_info trep
     trep = toRTypeRep t
 
@@ -712,7 +711,7 @@ isRefined ty
   | otherwise = False
 
 hasInnerRefinement :: F.Reftable r => RType c tv r -> Bool
-hasInnerRefinement (RFun _ _ rIn rOut _) =
+hasInnerRefinement (RFun _ _ rIn rOut) =
   isRefined rIn || isRefined rOut
 hasInnerRefinement (RAllT _ ty  _) =
   isRefined ty

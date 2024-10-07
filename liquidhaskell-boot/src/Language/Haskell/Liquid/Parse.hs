@@ -521,7 +521,6 @@ constraintP
        fromRTypeRep . RTypeRep [] []
                                ((val . fst <$> xts) ++ [dummySymbol])
                                (replicate (length xts + 1) defRFInfo)
-                               (replicate (length xts + 1) mempty)
                                ((snd <$> xts) ++ [t1]) <$> bareTypeP
 
 constraintEnvP :: Parser [(LocSymbol, BareType)]
@@ -1430,7 +1429,7 @@ tyBodyP ty
       _         -> E <$> exprP
     where outTy (RAllT _ t _)    = outTy t
           outTy (RAllP _ t)      = outTy t
-          outTy (RFun _ _ _ t _) = Just t
+          outTy (RFun _ _ _ t) = Just t
           outTy _                = Nothing
 
 locUpperOrInfixIdP :: Parser (Located Symbol)

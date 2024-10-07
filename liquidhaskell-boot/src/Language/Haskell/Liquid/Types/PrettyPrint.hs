@@ -353,7 +353,7 @@ pprRtyFun' bb t
 -}
 
 brkFun :: RType c tv r -> ([(F.Symbol, RType c tv r, Doc)], RType c tv r)
-brkFun (RFun b _ t t' _)  = ((b, t, text "->") : args, out)
+brkFun (RFun b _ t t')  = ((b, t, text "->") : args, out)
   where (args, out) = brkFun t'
 brkFun out                = ([], out)
 

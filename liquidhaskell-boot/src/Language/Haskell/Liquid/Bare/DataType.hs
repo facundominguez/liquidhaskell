@@ -680,8 +680,8 @@ getPsSig m pos (RVar _ r)
   = addps m pos r
 getPsSig m pos (RAppTy t1 t2 r)
   = addps m pos r ++ getPsSig m pos t1 ++ getPsSig m pos t2
-getPsSig m pos (RFun _ _ t1 t2 r)
-  = addps m pos r ++ getPsSig m pos t2 ++ getPsSig m (not pos) t1
+getPsSig m pos (RFun _ _ t1 t2)
+  = getPsSig m pos t2 ++ getPsSig m (not pos) t1
 getPsSig m pos (RHole r)
   = addps m pos r
 getPsSig _ _ z
@@ -772,12 +772,14 @@ strengthenClassSel v lt = lt { val = st }
   go :: SpecType -> Reader (Int, [F.Symbol]) SpecType
   go (RAllT a t r) = RAllT a <$> go t <*> pure r
   go (RAllP p t  ) = RAllP p <$> go t
-  go (RFun x i tx t r) | isEmbeddedClass tx =
-    RFun x i tx <$> go t <*> pure r
-  go (RFun x i tx t r) = do
+  go (RFun x i tx t) | isEmbeddedClass tx =
+    RFun x i tx <$> go t
+  go (RFun x i tx t) = do
     x' <- unDummy x <$> reader fst
-    r' <- singletonApp s <$> (L.reverse <$> reader snd)
-    RFun x' i tx <$> local (extend x') (go t) <*> pure (F.meet r r')
+    -- TODO: the change here could change behavior
+    -- r' <- singletonApp s <$> (L.reverse <$> reader snd)
+    -- RFun x' i tx <$> local (extend x') (go t) <*> pure (F.meet r r')
+    RFun x' i tx <$> local (extend x') (go t)
   go t = RT.strengthen t . singletonApp s . L.reverse <$> reader snd
 
 singletonApp :: F.Symbolic a => F.LocSymbol -> [a] -> UReft F.Reft
@@ -810,7 +812,7 @@ makeRecordSelectorSigs env name = checkRecordSelectorSigs . concatMap makeOne
       fs  = Bare.lookupGhcNamedVar env name . Ghc.flSelector <$> fls
       ts :: [ LocSpecType ]
       ts = [ Loc l l' (mkArrow (map (, mempty) (makeRTVar <$> dcpFreeTyVars dcp)) []
-                                 [(z, classRFInfo True, res, mempty)]
+                                 [(z, classRFInfo True, res)]
                                  (dropPreds (F.subst su t `RT.strengthen` mt)))
              | (x, t) <- reverse args -- NOTE: the reverse here is correct
              , let vv = rTypeValueVar t

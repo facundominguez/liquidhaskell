@@ -123,7 +123,6 @@ data RTypeF c tv r f
     , _rtf_rinfo  :: !RFInfo
     , _rtf_in     :: !f
     , _rtf_out    :: !f
-    , _rtf_reft   :: !r
     }
   | RAllTF {
       _rtf_tvbind :: !(RTVU c tv) -- RTVar tv (RType c tv ()))
@@ -192,7 +191,7 @@ type PartialSpecType = Free SpecTypeF ()
 
 project :: SpecType -> SpecTypeF SpecType
 project (RVar var reft            ) = RVarF var reft
-project (RFun bind i tin tout reft) = RFunF  bind i tin tout reft
+project (RFun bind i tin tout     ) = RFunF  bind i tin tout
 project (RAllT tvbind ty ref      ) = RAllTF tvbind ty ref
 project (RAllP pvbind ty          ) = RAllPF pvbind ty
 project (RApp c args pargs reft   ) = RAppF c args pargs reft
@@ -205,7 +204,7 @@ project (RHole r                  ) = RHoleF r
 
 embed :: SpecTypeF SpecType -> SpecType
 embed (RVarF var reft            ) = RVar var reft
-embed (RFunF bind i tin tout reft) = RFun bind  i tin tout reft
+embed (RFunF bind i tin tout     ) = RFun bind  i tin tout
 embed (RAllTF tvbind ty ref      ) = RAllT tvbind ty ref
 embed (RAllPF pvbind ty          ) = RAllP pvbind ty
 embed (RAppF c args pargs reft   ) = RApp c args pargs reft
@@ -243,7 +242,7 @@ plugType t = ana $ \case
 -- | returns (lambda binders, forall binders)
 collectSpecTypeBinders :: SpecType -> ([F.Symbol], [F.Symbol])
 collectSpecTypeBinders = \case
-  RFun bind _ tin tout _
+  RFun bind _ tin tout
     | isClassType tin -> collectSpecTypeBinders tout
     | otherwise       -> let (bs, abs') = collectSpecTypeBinders tout
                           in (bind : bs, abs')
@@ -267,7 +266,7 @@ buildHsExpr :: LHsExpr GhcPs -> SpecType -> LHsExpr GhcPs
 buildHsExpr result = go
   where
     go = \case
-      RFun bind _ tin tout _
+      RFun bind _ tin tout
         | isClassType tin -> go tout
         | otherwise       -> mkHsLam [nlVarPat (varSymbolToRdrName bind)] (go tout)
       RAllE _ _ t -> go t
@@ -318,11 +317,11 @@ elaborateSpecType' partialTp coreToLogic simplify t =
         (pure (t, []))
         (\bs' ee -> pure (RVar (RTV tv) (MkUReft (F.Reft (vv, ee)) p), bs'))
         -- YL : Fix
-    RFun  bind i tin tout ureft@(MkUReft reft@(F.Reft (vv, _oldE)) p) -> do
+    RFun  bind i tin tout -> do
       -- the reft is never actually used by the child
       -- maybe i should enforce this information at the type level
       let partialFunTp =
-            Free (RFunF bind i (wrap $ specTypeToPartial tin) (pure ()) ureft) :: PartialSpecType
+            Free (RFunF bind i (wrap $ specTypeToPartial tin) (pure ())) :: PartialSpecType
           partialTp' = partialTp >> partialFunTp :: PartialSpecType
       (eTin , bs ) <- elaborateSpecType' partialTp coreToLogic simplify tin
       (eTout, bs') <- elaborateSpecType' partialTp' coreToLogic simplify tout
@@ -332,42 +331,17 @@ elaborateSpecType' partialTp coreToLogic simplify t =
                     canonicalizeDictBinder bs (eTout, bs0')
               pure
                 ( F.notracepp "RFunTrivial0"
-                  $ RFun dictBinder i eTin eToutRenamed ureft
+                  $ RFun dictBinder i eTin eToutRenamed
                 , canonicalBinders
                 )
             | otherwise = do
               let (eToutRenamed, canonicalBinders) =
                     canonicalizeDictBinder bs (eTout, bs')
               pure
-                ( F.notracepp "RFunTrivial1" $ RFun bind i eTin eToutRenamed ureft
+                ( F.notracepp "RFunTrivial1" $ RFun bind i eTin eToutRenamed
                 , canonicalBinders
                 )
-          buildRFunCont bs'' ee
-            | isClassType tin, dictBinder : bs0' <- bs' = do
-              let (eToutRenamed, canonicalBinders) =
-                    canonicalizeDictBinder bs (eTout, bs0')
-                  (eeRenamed, canonicalBinders') =
-                    canonicalizeDictBinder canonicalBinders (ee, bs'')
-              pure
-                ( RFun dictBinder i
-                       eTin
-                       eToutRenamed
-                       (MkUReft (F.Reft (vv, eeRenamed)) p)
-                , canonicalBinders'
-                )
-            | otherwise = do
-              let (eToutRenamed, canonicalBinders) =
-                    canonicalizeDictBinder bs (eTout, bs')
-                  (eeRenamed, canonicalBinders') =
-                    canonicalizeDictBinder canonicalBinders (ee, bs'')
-              pure
-                ( RFun bind i
-                       eTin
-                       eToutRenamed
-                       (MkUReft (F.Reft (vv, eeRenamed)) p)
-                , canonicalBinders'
-                )
-      elaborateReft (reft, t) buildRFunContTrivial buildRFunCont
+      buildRFunContTrivial
 
         -- (\bs' ee | isClassType tin -> do
         --    let eeRenamed = renameDictBinder canonicalBinders bs' ee
@@ -686,7 +660,7 @@ specTypeToLHsType = \case
       NotPromoted
       -- (GM.notracePpr ("varRdr" ++ F.showpp (F.symbol tv)) $ getRdrName tv)
       (symbolToRdrNameNs tvName (F.symbol tv))
-    RFun _ _ tin tout _
+    RFun _ _ tin tout
       | isClassType tin -> noLocA $ HsQualTy Ghc.noExtField (noLocA [specTypeToLHsType tin]) (specTypeToLHsType tout)
       | otherwise       -> nlHsFunTy (specTypeToLHsType tin) (specTypeToLHsType tout)
     RAllT (ty_var_value -> (RTV tv)) t _ -> noLocA $ HsForAllTy

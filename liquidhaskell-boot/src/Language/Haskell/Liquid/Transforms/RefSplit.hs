@@ -31,11 +31,10 @@ splitRType :: Symbol
 splitRType f (RVar a r) = (RVar a r1, RVar a r2)
   where
         (r1, r2) = splitRef f r
-splitRType f (RFun x i tx t r) = (RFun x i tx1 t1 r1, RFun x i tx2 t2 r2)
+splitRType f (RFun x i tx t) = (RFun x i tx1 t1, RFun x i tx2 t2)
   where
         (tx1, tx2) = splitRType f tx
         (t1,  t2)  = splitRType f t
-        (r1,  r2)  = splitRef   f r
 splitRType f (RAllT v t r) = (RAllT v t1 r1, RAllT v t2 r2)
   where
         (t1, t2) = splitRType f t

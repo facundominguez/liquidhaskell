@@ -38,7 +38,6 @@ import           Control.Monad.State
 import           Control.Monad.Except
 import           Control.Monad.Identity
 import qualified Language.Fixpoint.Misc                as Misc
-import qualified Language.Haskell.Liquid.Misc          as Misc
 import           Language.Fixpoint.Types               hiding (panic, Error, R, simplify, isBool)
 import qualified Language.Fixpoint.Types               as F
 import qualified Language.Haskell.Liquid.GHC.Misc      as GM
@@ -54,10 +53,10 @@ import           Language.Haskell.Liquid.Types.RefType
 import qualified Data.HashMap.Strict                   as M
 
 logicType :: (Reftable r) => Bool -> Type -> RRType r
-logicType allowTC τ      = fromRTypeRep $ t { ty_binds = bs, ty_info = is, ty_args = as, ty_refts = rs}
+logicType allowTC τ      = fromRTypeRep $ t { ty_binds = bs, ty_info = is, ty_args = as}
   where
     t            = toRTypeRep $ ofType τ
-    (bs, is, as, rs) = Misc.unzip4 $ dropWhile (isErasable' . Misc.thd4) $ Misc.zip4 (ty_binds t) (ty_info t) (ty_args t) (ty_refts t)
+    (bs, is, as) = unzip3 $ dropWhile (isErasable' . Misc.thd3) $ zip3 (ty_binds t) (ty_info t) (ty_args t)
     isErasable'  = if allowTC then isEmbeddedClass else isClassType
 
 {- | [NOTE:inlineSpecType type]: the refinement depends on whether the result type is a Bool or not:
@@ -99,14 +98,14 @@ measureSpecType allowTC v = go mkT [] [(1::Int)..] st
 
     go f args i (RAllT a t r)    = RAllT a (go f args i t) r
     go f args i (RAllP p t)      = RAllP p $ go f args i t
-    go f args i (RFun x ii t1 t2 r)
-     | (if allowTC then isEmbeddedClass else isClassType) t1           = RFun x ii t1 (go f args i t2) r
-    go f args i t@(RFun _ ii t1 t2 r)
-     | hasRApps t               = RFun x' ii t1 (go f (x':args) (tail i) t2) r
+    go f args i (RFun x ii t1 t2)
+     | (if allowTC then isEmbeddedClass else isClassType) t1           = RFun x ii t1 (go f args i t2)
+    go f args i t@(RFun _ ii t1 t2)
+     | hasRApps t               = RFun x' ii t1 (go f (x':args) (tail i) t2)
                                        where x' = intSymbol (symbol ("x" :: String)) (head i)
     go f args _ t                = t `strengthen` f args
 
-    hasRApps (RFun _ _ t1 t2 _) = hasRApps t1 || hasRApps t2
+    hasRApps (RFun _ _ t1 t2) = hasRApps t1 || hasRApps t2
     hasRApps RApp {}          = True
     hasRApps _                = False
 

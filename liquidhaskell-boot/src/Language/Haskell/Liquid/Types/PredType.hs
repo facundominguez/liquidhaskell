@@ -184,11 +184,11 @@ dcWrapSpecType allowTC dc (DataConP _ _ vs ps cs yts rt _ _ _)
     mkDSym z = F.symbol z `F.suffixSymbol` F.symbol dc
     bs       = mkDSym <$> as
     tx _  []     []     []     = []
-    tx su (x:xs) (y:ys) (t:ts) = (y, classRFInfo allowTC , if allowTC && isCls then t else F.subst (F.mkSubst su) t, mempty)
+    tx su (x:xs) (y:ys) (t:ts) = (y, classRFInfo allowTC , if allowTC && isCls then t else F.subst (F.mkSubst su) t)
                                : tx ((x, F.EVar y):su) xs ys ts
     tx _ _ _ _ = panic Nothing "PredType.dataConPSpecType.tx called on invalid inputs"
     yts'     = tx [] as bs sts
-    ts'      = map ("" , classRFInfo allowTC , , mempty) cs ++ yts'
+    ts'      = map ("" , classRFInfo allowTC ,) cs ++ yts'
     subst    = F.mkSubst [(x, F.EVar y) | (x, y) <- zip as bs]
     rt'      = F.subst subst rt
     makeVars = zipWith (\v a -> RTVar v (rTVarInfo a :: RTVInfo RSort)) vs (fst $ splitForAllTyCoVars $ dataConRepType dc)
@@ -330,7 +330,7 @@ substPVar src dst = go
      | pname q == pname src = RAllP q t
      | otherwise            = RAllP q (go t)
     go (RAllT a t r)      = RAllT a   (go t)  (goRR r)
-    go (RFun x i t t' r)  = RFun x i  (go t)  (go t') (goRR r)
+    go (RFun x i t t')  = RFun x i  (go t)  (go t')
     go (RAllE x t t')     = RAllE x   (go t)  (go t')
     go (REx x t t')       = REx x     (go t)  (go t')
     go (RRTy e r o rt)    = RRTy e'   (goRR r) o (go rt) where e' = [(x, go t) | (x, t) <- e]
@@ -373,13 +373,9 @@ substPred msg (p, tp) (RAllP q@PV{} t)
 
 substPred msg su (RAllT a t r)  = RAllT a (substPred msg su t) r
 
-substPred msg su@(rp,prop) (RFun x i rt rt' r)
+substPred msg su (RFun x i rt rt')
 --                        = RFun x (substPred msg su t) (substPred msg su t') r
-  | null πs                     = RFun x i (substPred msg su rt) (substPred msg su rt') r
-  | otherwise                   =
-      let sus = (\π -> F.mkSubst (zip (fst <$> rf_args prop) (thd3 <$> pargs π))) <$> πs in
-      foldl (\t subst -> t `F.meet` F.subst subst (rf_body prop)) (RFun x i (substPred msg su rt) (substPred msg su rt') r') sus
-  where (r', πs)                = splitRPvar rp r
+    = RFun x i (substPred msg su rt) (substPred msg su rt')
 -- ps has   , pargs :: ![(t, Symbol, Expr)]
 
 substPred msg su (RRTy e r o t) = RRTy (mapSnd (substPred msg su) <$> e) r o (substPred msg su t)
@@ -456,8 +452,8 @@ splitRPvar pv (MkUReft x (Pr pvs)) = (MkUReft x (Pr pvs'), epvs)
 freeArgsPs :: PVar (RType t t1 ()) -> RType t t1 (UReft t2) -> [F.Symbol]
 freeArgsPs p (RVar _ r)
   = freeArgsPsRef p r
-freeArgsPs p (RFun _ _ t1 t2 r)
-  = L.nub $  freeArgsPsRef p r ++ freeArgsPs p t1 ++ freeArgsPs p t2
+freeArgsPs p (RFun _ _ t1 t2)
+  = L.nub $ freeArgsPs p t1 ++ freeArgsPs p t2
 freeArgsPs p (RAllT _ t r)
   = L.nub $  freeArgsPs p t ++ freeArgsPsRef p r
 freeArgsPs p (RAllP p' t)

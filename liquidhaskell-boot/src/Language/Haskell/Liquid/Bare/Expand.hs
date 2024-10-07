@@ -218,7 +218,7 @@ buildTypeEdges table = ordNub . go
   where
     -- go :: t -> [Symbol]
     go (RApp c ts rs _) = go_alias (F.symbol c) ++ concatMap go ts ++ concatMap go (mapMaybe go_ref rs)
-    go (RFun _ _ t1 t2 _) = go t1 ++ go t2
+    go (RFun _ _ t1 t2) = go t1 ++ go t2
     go (RAppTy t1 t2 _) = go t1 ++ go t2
     go (RAllE _ t1 t2)  = go t1 ++ go t2
     go (REx _ t1 t2)    = go t1 ++ go t2
@@ -395,7 +395,7 @@ expandBareType rtEnv _ = go
                              Just rta -> expandRTAliasApp (GM.fSourcePos c) rta (go <$> ts) r
                              Nothing  -> RApp c (go <$> ts) (goRef <$> rs) r
     go (RAppTy t1 t2 r)  = RAppTy (go t1) (go t2) r
-    go (RFun  x i t1 t2 r) = RFun  x i (go t1) (go t2) r
+    go (RFun  x i t1 t2) = RFun  x i (go t1) (go t2)
     go (RAllT a t r)     = RAllT a (go t) r
     go (RAllP a t)       = RAllP a (go t)
     go (RAllE x t1 t2)   = RAllE x (go t1) (go t2)
@@ -708,10 +708,10 @@ data ExSt = ExSt { fresh :: Int
 expToBindT :: SpecType -> State ExSt SpecType
 expToBindT (RVar v r)
   = expToBindRef r >>= addExists . RVar v
-expToBindT (RFun x i t1 t2 r)
+expToBindT (RFun x i t1 t2)
   = do t1' <- expToBindT t1
        t2' <- expToBindT t2
-       expToBindRef r >>= addExists . RFun x i t1' t2'
+       addExists (RFun x i t1' t2')
 expToBindT (RAllT a t r)
   = do t' <- expToBindT t
        expToBindRef r >>= addExists . RAllT a t'

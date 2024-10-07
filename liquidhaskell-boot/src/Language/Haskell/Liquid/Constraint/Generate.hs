@@ -331,16 +331,15 @@ cconsE' γ (Lam α e) (RAllT α' t r) | isTyVar α
        addForAllConstraint γ' α e (RAllT α' t r)
        cconsE γ' e $ subsTyVarMeet' (ty_var_value α', rVar α) t
 
-cconsE' γ (Lam x e) (RFun y i ty t r)
+cconsE' γ (Lam x e) (RFun y i ty t)
   | not (isTyVar x)
   = do γ' <- γ += ("cconsE", x', ty)
        cconsE γ' e t'
-       addFunctionConstraint γ x e (RFun x' i ty t' r')
+       addFunctionConstraint γ x e (RFun x' i ty t')
        addIdA x (AnnDef ty)
   where
     x'  = F.symbol x
     t'  = t `F.subst1` (y, F.EVar x')
-    r'  = r `F.subst1` (y, F.EVar x')
 
 cconsE' γ (Tick tt e) t
   = cconsE (γ `setLocation` Sp.Tick tt) e t
@@ -359,18 +358,6 @@ cconsE' γ e t
        te' <- instantiatePreds γ e te >>= addPost γ
        addC (SubC γ te' t) ("cconsE: " ++ "\n t = " ++ showpp t ++ "\n te = " ++ showpp te ++ GM.showPpr e)
 
-lambdaSingleton :: CGEnv -> F.TCEmb TyCon -> Var -> CoreExpr -> CG (UReft F.Reft)
-lambdaSingleton γ tce x e
-  | higherOrderFlag γ
-  = do expr <- lamExpr γ e
-       return $ case expr of
-         Just e' -> uTop $ F.exprReft $ F.ELam (F.symbol x, sx) e'
-         _       -> mempty
-  where
-    sx = typeSort tce $ Ghc.expandTypeSynonyms $ varType x
-lambdaSingleton _ _ _ _
-  = return mempty
-
 addForAllConstraint :: CGEnv -> Var -> CoreExpr -> SpecType -> CG ()
 addForAllConstraint γ _ _ (RAllT rtv rt rr)
   | F.isTauto rr
@@ -387,17 +374,19 @@ addForAllConstraint γ _ _ _
 
 
 addFunctionConstraint :: CGEnv -> Var -> CoreExpr -> SpecType -> CG ()
-addFunctionConstraint γ x e (RFun y i ty t r)
+addFunctionConstraint γ x e (RFun y i ty t)
   = do ty'      <- true (typeclass (getConfig γ)) ty
        t'       <- true (typeclass (getConfig γ)) t
        let truet = RFun y i ty' t'
        lamE <- lamExpr γ e
        case (lamE, higherOrderFlag γ) of
-          (Just e', True) -> do tce    <- gets tyConEmbed
-                                let sx  = typeSort tce $ varType x
-                                let ref = uTop $ F.exprReft $ F.ELam (F.symbol x, sx) e'
-                                addC (SubC γ (truet ref) $ truet r) "function constraint singleton"
-          _ -> addC (SubC γ (truet mempty) $ truet r) "function constraint true"
+          (Just _e', True) -> do
+                                tce    <- gets tyConEmbed
+                                let _sx  = typeSort tce $ varType x
+                                -- TODO: could change behavior
+                                -- let ref = uTop $ F.exprReft $ F.ELam (F.symbol x, sx) e'
+                                addC (SubC γ truet truet) "function constraint singleton"
+          _ -> addC (SubC γ truet truet) "function constraint true"
 addFunctionConstraint γ _ _ _
   = impossible (Just $ getLocation γ) "addFunctionConstraint: called on non function argument"
 
@@ -405,8 +394,8 @@ splitConstraints :: TyConable c
                  => Bool -> RType c tv r -> ([[(F.Symbol, RType c tv r)]], RType c tv r)
 splitConstraints allowTC (RRTy cs _ OCons t)
   = let (css, t') = splitConstraints allowTC t in (cs:css, t')
-splitConstraints allowTC (RFun x i tx@(RApp c _ _ _) t r) | isErasable c
-  = let (css, t') = splitConstraints allowTC  t in (css, RFun x i tx t' r)
+splitConstraints allowTC (RFun x i tx@(RApp c _ _ _) t) | isErasable c
+  = let (css, t') = splitConstraints allowTC  t in (css, RFun x i tx t')
   where isErasable = if allowTC then isEmbeddedDict else isClass
 splitConstraints _ t
   = ([], t)
@@ -503,7 +492,7 @@ consE γ e'@(App e a) | Just aDict <- getExprDict γ a
         (γ', te''')  <- dropExists γ te'
         te''         <- dropConstraints γ te'''
         updateLocA {- πs -} (exprLoc e) te''
-        let RFun x _ tx t _ = checkFun ("Non-fun App with caller ", e') γ te''
+        let RFun x _ tx t = checkFun ("Non-fun App with caller ", e') γ te''
         cconsE γ' a tx
         addPost γ'        $ maybe (checkUnbound γ' e' x t a) (F.subst1 t . (x,)) (argExpr γ a)
 
@@ -513,7 +502,7 @@ consE γ e'@(App e a)
        (γ', te2)  <- dropExists γ te1
        te3        <- dropConstraints γ te2
        updateLocA (exprLoc e) te3
-       let RFun x _ tx t _ = checkFun ("Non-fun App with caller ", e') γ te3
+       let RFun x _ tx t = checkFun ("Non-fun App with caller ", e') γ te3
        cconsE γ' a tx
        makeSingleton γ' (simplify e') <$> addPost γ' (maybe (checkUnbound γ' e' x t a) (F.subst1 t . (x,)) (argExpr γ $ simplify a))
 
@@ -528,9 +517,10 @@ consE γ  e@(Lam x e1)
        t1      <- consE γ' e1
        addIdA x $ AnnDef tx
        addW     $ WfC γ tx
-       tce     <- gets tyConEmbed
-       lamSing <- lambdaSingleton γ tce x e1
-       return   $ RFun (F.symbol x) (mkRFInfo $ getConfig γ) tx t1 lamSing
+       _tce     <- gets tyConEmbed
+       -- TODO: this could change behavior
+       -- lamSing <- lambdaSingleton γ tce x e1
+       return   $ RFun (F.symbol x) (mkRFInfo $ getConfig γ) tx t1
     where
       FunTy { ft_arg = τx } = exprType e
 
@@ -812,8 +802,8 @@ dropExists γ (REx x tx t) =         (, t) <$> γ += ("dropExists", x, tx)
 dropExists γ t            = return (γ, t)
 
 dropConstraints :: CGEnv -> SpecType -> CG SpecType
-dropConstraints cgenv (RFun x i tx@(RApp c _ _ _) t r) | isErasable c
-  = flip (RFun x i tx) r <$> dropConstraints cgenv t
+dropConstraints cgenv (RFun x i tx@(RApp c _ _ _) t) | isErasable c
+  = RFun x i tx <$> dropConstraints cgenv t
   where
     isErasable = if typeclass (getConfig cgenv) then isEmbeddedDict else isClass
 dropConstraints cgenv (RRTy cts _ OCons rt)
@@ -910,7 +900,7 @@ unfoldR :: SpecType -> SpecType -> [Var] -> (SpecType, [SpecType], SpecType)
 unfoldR td (RApp _ ts rs _) ys = (t3, tvys ++ yts, ignoreOblig rt)
   where
         tbody                = instantiatePvs (instantiateTys td ts) (reverse rs)
-        ((ys0,_,yts',_), rt) = safeBkArrow (F.notracepp msg $ instantiateTys tbody tvs')
+        ((ys0,_,yts'), rt) = safeBkArrow (F.notracepp msg $ instantiateTys tbody tvs')
         msg                  = "INST-TY: " ++ F.showpp (td, ts, tbody, ys, tvs')
         yts''                = zipWith F.subst sus (yts'++[rt])
         (t3,yts)             = (last yts'', init yts'')
@@ -1092,7 +1082,6 @@ singletonReft = uTop . F.symbolReft . F.symbol
 strengthenTop :: (PPrint r, F.Reftable r) => RType c tv r -> r -> RType c tv r
 strengthenTop (RApp c ts rs r) r'   = RApp c ts rs   $ F.meet r r'
 strengthenTop (RVar a r) r'         = RVar a         $ F.meet r r'
-strengthenTop (RFun b i t1 t2 r) r' = RFun b i t1 t2 $ F.meet r r'
 strengthenTop (RAppTy t1 t2 r) r'   = RAppTy t1 t2   $ F.meet r r'
 strengthenTop (RAllT a t r)    r'   = RAllT a t      $ F.meet r r'
 strengthenTop t _                   = t
@@ -1101,7 +1090,6 @@ strengthenTop t _                   = t
 strengthenMeet :: (PPrint r, F.Reftable r) => RType c tv r -> r -> RType c tv r
 strengthenMeet (RApp c ts rs r) r'  = RApp c ts rs (r `F.meet` r')
 strengthenMeet (RVar a r) r'        = RVar a       (r `F.meet` r')
-strengthenMeet (RFun b i t1 t2 r) r'= RFun b i t1 t2 (r `F.meet` r')
 strengthenMeet (RAppTy t1 t2 r) r'  = RAppTy t1 t2 (r `F.meet` r')
 strengthenMeet (RAllT a t r) r'     = RAllT a (strengthenMeet t r') (r `F.meet` r')
 strengthenMeet t _                  = t

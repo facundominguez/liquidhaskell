@@ -60,11 +60,10 @@ unify mkError c li t1 t2
        -- text "\ncompared\n" <+> pprint t11 <+> text "\nWITH\n" <+> pprint t22 
            )]
 
-    t22 = fromRTypeRep (trep2 {ty_vars = [], ty_binds = fst <$> args2, ty_args = snd <$> args2, ty_refts = drop (length tc2) (ty_refts trep2)})
+    t22 = fromRTypeRep (trep2 {ty_vars = [], ty_binds = fst <$> args2, ty_args = snd <$> args2})
     t11 = fromRTypeRep (trep1 { ty_vars = []
                               , ty_binds = fst <$> args2
                               , ty_args = tx . snd <$> args1
-                              , ty_refts = F.subst esubst <$> drop (length tc1) (ty_refts trep1)
                               , ty_res = tx $ ty_res trep1})
     tx = subtsSpec tsubst . F.subst esubst
     subtsSpec = subts :: ([(TyVar, Type)] -> SpecType -> SpecType)
@@ -72,7 +71,7 @@ unify mkError c li t1 t2
     trep1 = toRTypeRep $ val t1 
     trep2 = toRTypeRep $ val t2 
     (tc1, args1) = splitTypeConstraints $ zip (ty_binds trep1) (ty_args trep1)
-    (tc2, args2) = splitTypeConstraints $ zip (ty_binds trep2) (ty_args trep2)
+    (_tc2, args2) = splitTypeConstraints $ zip (ty_binds trep2) (ty_args trep2)
     esubst = F.mkSubst (esubst1
                  ++  [(F.symbol x, F.EVar (F.symbol y)) | (Left x, (Left y, _)) <- lilEqus li]
                      )

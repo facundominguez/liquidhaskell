@@ -205,13 +205,13 @@ splitType t  = (αs, map irrelevantMult ts, tr)
     (αs, tb) = splitForAllTyCoVars t
     (ts, tr) = splitFunTys tb
 
-stitchArgs :: (Monoid t1, PPrint a)
+stitchArgs :: PPrint a
            => Bool
            -> SrcSpan
            -> a
            -> [(Symbol, Maybe (RRType Reft))]
            -> [Type]
-           -> [(Symbol, RFInfo, RRType Reft, t1)]
+           -> [(Symbol, RFInfo, RRType Reft)]
 stitchArgs allowTC sp dc allXs allTs
   | nXs == nTs         = (g (dummySymbol, Nothing) . ofType <$> pts)
                       ++ zipWith g xs (ofType <$> ts)
@@ -221,8 +221,8 @@ stitchArgs allowTC sp dc allXs allTs
       (_  , xs)        = L.partition (coArg . snd) allXs
       nXs              = length xs
       nTs              = length ts
-      g (x, Just t) _  = (x, classRFInfo allowTC, t, mempty)
-      g (x, _)      t  = (x, classRFInfo allowTC, t, mempty)
+      g (x, Just t) _  = (x, classRFInfo allowTC, t)
+      g (x, _)      t  = (x, classRFInfo allowTC, t)
       coArg Nothing    = False
       coArg (Just t)   = (if allowTC then isEmbeddedDictType else Ghc.isEvVarType ). toType False $ t
 

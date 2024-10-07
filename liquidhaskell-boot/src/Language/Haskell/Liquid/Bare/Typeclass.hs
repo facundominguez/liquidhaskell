@@ -227,15 +227,14 @@ elaborateClassDcp coreToLg simplifier dcp = do
     [ ( recsel{- F.symbol dc-}
       , classRFInfo True
       , resTy
-      , mempty
       )
     ]
     t
   -- YL: is this redundant if we already have strengthenClassSel?
   strengthenTy :: F.Symbol -> SpecType -> SpecType
-  strengthenTy x t = mkUnivs tvs pvs (RFun z i clas (t' `RT.strengthen` mt) r)
+  strengthenTy x t = mkUnivs tvs pvs (RFun z i clas (t' `RT.strengthen` mt))
    where
-    (tvs, pvs, RFun z i clas t' r) = bkUniv t
+    (tvs, pvs, RFun z i clas t') = bkUniv t
     vv = rTypeValueVar t'
     mt = RT.uReft (vv, F.PAtom F.Eq (F.EVar vv) (F.EApp (F.EVar x) (F.EVar z)))
 
@@ -249,7 +248,7 @@ elaborateMethod dc methods st = mapExprReft
   grabtcbind :: SpecType -> F.Symbol
   grabtcbind t =
     F.notracepp "grabtcbind"
-      $ case Misc.fst4 . fst . bkArrow . Misc.thd3 . bkUniv $ t of
+      $ case Misc.fst3 . fst . bkArrow . Misc.thd3 . bkUniv $ t of
           tcbind : _ -> tcbind
           []         -> impossible
             Nothing
@@ -288,8 +287,8 @@ renameTvs :: (F.Symbolic tv, F.PPrint tv) => (tv -> tv) -> RType c tv r -> RType
 renameTvs rename t
   | RVar tv r <- t
   = RVar (rename tv) r
-  | RFun b i tin tout r <- t
-  = RFun b i (renameTvs rename tin) (renameTvs rename tout) r
+  | RFun b i tin tout <- t
+  = RFun b i (renameTvs rename tin) (renameTvs rename tout)
   | RAllT (RTVar tv info) tres r <- t
   = RAllT (RTVar (rename tv) info) (renameTvs rename tres) r
   | RAllP b tres <- t
@@ -341,7 +340,7 @@ makeClassAuxTypesOne elab (ldcp, inst, methods) =
         -- dict binder will never be changed because we optimized PAnd[]
         -- lq0 lq1 ...
             --
-        ptys    = [(F.vv (Just i), classRFInfo True, pty, mempty) | (i,pty) <- zip [0,1..] isPredSpecTys]
+        ptys    = [(F.vv (Just i), classRFInfo True, pty) | (i,pty) <- zip [0,1..] isPredSpecTys]
         fullSig =
           mkArrow
             (zip isRTvs (repeat mempty))

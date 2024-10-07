@@ -98,11 +98,10 @@ removeAbsRef (RVar v (MkUReft r _))
     where
       r' = MkUReft r mempty
       out = RVar  v r'
-removeAbsRef (RFun  b i s t (MkUReft r _))
+removeAbsRef (RFun  b i s t)
   = out
     where
-      r' = MkUReft r mempty
-      out = RFun  b i (removeAbsRef s) (removeAbsRef t) r'
+      out = RFun  b i (removeAbsRef s) (removeAbsRef t)
 removeAbsRef (RAllT b t r)
   = RAllT b (removeAbsRef t) r
 removeAbsRef (RAllP p t)
@@ -222,9 +221,8 @@ consRelCheck γ ψ l1@(Lam α1 e1) l2@(Lam α2 e2) rt1@(RAllT s1 t1 r1) rt2@(RAl
     consRelCheck γ'' ψ e1 e2 (sb (s1, α1) t1) (sb (s2, α2) t2) p
   where sb (s, α) = subsTyVarMeet' (ty_var_value s, rVar α)
 
-consRelCheck γ ψ l1@(Lam x1 e1) l2@(Lam x2 e2) rt1@(RFun v1 _ s1 t1 r1) rt2@(RFun v2 _ s2 t2 r2) pr@(F.PImp q p)
+consRelCheck γ ψ l1@(Lam x1 e1) l2@(Lam x2 e2) rt1@(RFun v1 _ s1 t1) rt2@(RFun v2 _ s2 t2) pr@(F.PImp q p)
   = traceChk "Lam Expr" l1 l2 rt1 rt2 pr $ do
-    entlFunRefts γ r1 r2 "consRelCheck Lam Expr"
     let (pvar1, pvar2) = (F.symbol evar1, F.symbol evar2)
     let subst = F.subst $ F.mkSubst [(v1, F.EVar pvar1), (v2, F.EVar pvar2)]
     γ'  <- γ += ("consRelCheck Lam L", pvar1, subst s1)
@@ -312,7 +310,7 @@ ctorTy _ (LitAlt c) _ = return $ uTop <$> literalFRefType c
 ctorTy _ DEFAULT t = return t
 
 unapply :: CGEnv -> F.Symbol -> SpecType -> [Var] -> SpecType -> CoreExpr -> String -> CG (CGEnv, CoreExpr)
-unapply γ y yt (z : zs) (RFun x _ s t _) e suffix = do
+unapply γ y yt (z : zs) (RFun x _ s t) e suffix = do
   γ' <- γ += ("unapply arg", evar, s)
   unapply γ' y yt zs (t `F.subst1` (x, F.EVar evar)) e' suffix
   where
@@ -391,16 +389,14 @@ consRelSynthApp γ ψ ft1 ft2 ps e1 (Tick _ e2) =
 consRelSynthApp γ ψ ft1 ft2 ps (Tick t1 e1) e2 =
   consRelSynthApp (γ `setLocation` Sp.Tick t1) ψ ft1 ft2 ps e1 e2
 
-consRelSynthApp γ ψ ft1@(RFun v1 _ s1 t1 r1) ft2@(RFun v2 _ s2 t2 r2) ps@[F.PImp q p] d1@(Var x1) d2@(Var x2)
+consRelSynthApp γ ψ ft1@(RFun v1 _ s1 t1) ft2@(RFun v2 _ s2 t2) ps@[F.PImp q p] d1@(Var x1) d2@(Var x2)
   = traceSynApp ft1 ft2 ps d1 d2 $ do
-    entlFunRefts γ r1 r2 "consRelSynthApp HO"
     let qsubst = F.subst $ F.mkSubst [(v1, F.EVar resL), (v2, F.EVar resR)]
     consRelCheck γ ψ d1 d2 s1 s2 (qsubst q)
     let subst = F.subst $ F.mkSubst [(v1, F.EVar $ F.symbol x1), (v2, F.EVar $ F.symbol x2)]
     return (subst t1, subst t2, [(subst . unapplyRelArgs v1 v2) p])
-consRelSynthApp γ ψ ft1@(RFun v1 _ s1 t1 r1) ft2@(RFun v2 _ s2 t2 r2) ps@[] d1@(Var x1) d2@(Var x2)
+consRelSynthApp γ ψ ft1@(RFun v1 _ s1 t1) ft2@(RFun v2 _ s2 t2) ps@[] d1@(Var x1) d2@(Var x2)
   = traceSynApp ft1 ft2 ps d1 d2 $ do
-    entlFunRefts γ r1 r2 "consRelSynthApp FO"
     consUnaryCheck γ d1 s1
     consUnaryCheck γ d2 s2
     (_, _, qs) <- consRelSynth γ ψ d1 d2
@@ -453,7 +449,7 @@ consUnarySynth γ e@(Lam x d)  =
   γ' <- γ += ("consUnarySynth (Lam)", F.symbol x, s)
   t  <- consUnarySynth γ' d
   addW $ WfC γ s
-  return $ removeAbsRef $ RFun (F.symbol x) (mkRFInfo $ getConfig γ) s t mempty
+  return $ removeAbsRef $ RFun (F.symbol x) (mkRFInfo $ getConfig γ) s t
 consUnarySynth γ e@(Case _ _ _ alts) =
   traceUSyn "Case" e $ do
   t   <- freshTyType (typeclass (getConfig γ)) (caseKVKind alts) e $ Ghc.exprType e
@@ -477,7 +473,7 @@ base RVar{} = True
 base _      = False
 
 selfifyExpr :: SpecType -> F.Expr -> Maybe SpecType
-selfifyExpr (RFun v i s t r) f = (\t' -> RFun v i s t' r) <$> selfifyExpr t (F.EApp f (F.EVar v))
+selfifyExpr (RFun v i s t) f = (\t' -> RFun v i s t') <$> selfifyExpr t (F.EApp f (F.EVar v))
 selfifyExpr t e | base t = Just $ t `strengthen` eq e
   where eq = uTop . F.exprReft
 selfifyExpr _ _ = Nothing
@@ -491,7 +487,7 @@ selfify t _ = t
 consUnarySynthApp :: CGEnv -> SpecType -> CoreExpr -> CG SpecType
 consUnarySynthApp γ t (Tick y e) = do
   consUnarySynthApp (γ `setLocation` Sp.Tick y) t e
-consUnarySynthApp γ (RFun x _ s t _) d@(Var y) = do
+consUnarySynthApp γ (RFun x _ s t) d@(Var y) = do
   consUnaryCheck γ d s
   return $ t `F.subst1` (x, F.EVar $ F.symbol y)
 consUnarySynthApp γ (RAllT α t _) (Type s) = do
@@ -520,7 +516,7 @@ consUnaryCheck γ e t = do
 --------------------------------------------------------------
 
 consRelSub :: CGEnv -> SpecType -> SpecType -> F.Expr -> F.Expr -> CG ()
-consRelSub γ f1@(RFun g1 _ s1@RFun{} t1 _) f2@(RFun g2 _ s2@RFun{} t2 _)
+consRelSub γ f1@(RFun g1 _ s1@RFun{} t1) f2@(RFun g2 _ s2@RFun{} t2)
              pr1@(F.PImp qr1@F.PImp{} p1)  pr2@(F.PImp qr2@F.PImp{} p2)
   = traceSub "hof" f1 f2 pr1 pr2 $ do
     consRelSub γ s1 s2 qr2 qr1
@@ -528,7 +524,7 @@ consRelSub γ f1@(RFun g1 _ s1@RFun{} t1 _) f2@(RFun g2 _ s2@RFun{} t2 _)
     γ'' <- γ' += ("consRelSub HOF", F.symbol g2, s2)
     let psubst = unapplyArg resL g1 <> unapplyArg resR g2
     consRelSub γ'' t1 t2 (psubst p1) (psubst p2)
-consRelSub γ f1@(RFun g1 _ s1@RFun{} t1 _) f2@(RFun g2 _ s2@RFun{} t2 _)
+consRelSub γ f1@(RFun g1 _ s1@RFun{} t1) f2@(RFun g2 _ s2@RFun{} t2)
              pr1@(F.PAnd [F.PImp qr1@F.PImp{} p1])            pr2@(F.PImp qr2@F.PImp{} p2)
   = traceSub "hof" f1 f2 pr1 pr2 $ do
     consRelSub γ s1 s2 qr2 qr1
@@ -536,12 +532,12 @@ consRelSub γ f1@(RFun g1 _ s1@RFun{} t1 _) f2@(RFun g2 _ s2@RFun{} t2 _)
     γ'' <- γ' += ("consRelSub HOF", F.symbol g2, s2)
     let psubst = unapplyArg resL g1 <> unapplyArg resR g2
     consRelSub γ'' t1 t2 (psubst p1) (psubst p2)
-consRelSub γ f1@(RFun x1 _ s1 e1 _) f2 p1 p2 =
+consRelSub γ f1@(RFun x1 _ s1 e1) f2 p1 p2 =
   traceSub "fun" f1 f2 p1 p2 $ do
     γ' <- γ += ("consRelSub RFun L", F.symbol x1, s1)
     let psubst = unapplyArg resL x1
     consRelSub γ' e1 f2 (psubst p1) (psubst p2)
-consRelSub γ f1 f2@(RFun x2 _ s2 e2 _) p1 p2 =
+consRelSub γ f1 f2@(RFun x2 _ s2 e2) p1 p2 =
   traceSub "fun" f1 f2 p1 p2 $ do
     γ' <- γ += ("consRelSub RFun R", F.symbol x2, s2)
     let psubst = unapplyArg resR x2
@@ -617,17 +613,17 @@ xbody e          = e
 
 refts :: SpecType -> [RReft]
 refts (RAllT _ t r ) = r : refts t
-refts (RFun _ _ _ t r) = r : refts t
+refts (RFun _ _ _ t) = refts t
 refts _              = []
 
 vargs :: SpecType -> ([F.Symbol], [SpecType])
 vargs (RAllT _ t _ ) = vargs t
-vargs (RFun v _ s t _) = bimap (v :) (s :) $ vargs t
+vargs (RFun v _ s t) = bimap (v :) (s :) $ vargs t
 vargs _              = ([], [])
 
 ret :: SpecType -> SpecType
 ret (RAllT _ t _ ) = ret t
-ret (RFun _ _ _ t _) = ret t
+ret (RFun _ _ _ t) = ret t
 ret t              = t
 
 prems :: F.Expr -> [F.Expr]
@@ -648,7 +644,7 @@ extendWithTyVar γ a
 matchFunArgs :: SpecType -> SpecType -> F.Symbol -> F.Expr
 matchFunArgs (RAllT _ t1 _) t2 x = matchFunArgs t1 t2 x
 matchFunArgs t1 (RAllT _ t2 _) x = matchFunArgs t1 t2 x
-matchFunArgs (RFun x1 _ _ t1 _) (RFun x2 _ _ t2 _) x =
+matchFunArgs (RFun x1 _ _ t1) (RFun x2 _ _ t2) x =
   if x == x1 then F.EVar x2 else matchFunArgs t1 t2 x
 matchFunArgs t1 t2 x | isBase t1 && isBase t2 = F.EVar x
 matchFunArgs t1 t2 _ = F.panic $ "matchFunArgs undefined for " ++ F.showpp (t1, t2)

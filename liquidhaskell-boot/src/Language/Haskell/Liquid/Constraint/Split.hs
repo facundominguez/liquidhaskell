@@ -51,7 +51,7 @@ import           Language.Haskell.Liquid.Constraint.Monad (envToSub)
 --------------------------------------------------------------------------------
 splitW ::  WfC -> CG [FixWfC]
 --------------------------------------------------------------------------------
-splitW (WfC γ t@(RFun x _ t1 t2 _))
+splitW (WfC γ t@(RFun x _ t1 t2))
   =  do ws'  <- splitW (WfC γ t1)
         γ'   <- γ += ("splitW", x, t1)
         ws   <- bsplitW γ t
@@ -191,11 +191,11 @@ splitC allowTC (SubC cgenv (RRTy e r o t1) t2)
        c2 <- splitC allowTC (SubC cgenv t1 t2)
        return $ c1 ++ c2
 
-splitC allowTC (SubC γ (RFun x1 i1 t1 t1' r1) (RFun x2 i2 t2 t2' r2))
+splitC allowTC (SubC γ (RFun x1 i1 t1 t1') (RFun x2 i2 t2 t2'))
   =  do cs'      <- splitC allowTC  (SubC γ t2 t1)
         γ'       <- γ+= ("splitC allowTC", x2, t2)
-        cs       <- bsplitC γ (RFun x1 i1 t1 t1' (r1 `F.subst1` (x1, F.EVar x2)))
-                              (RFun x2 i2 t2 t2'  r2)
+        cs       <- bsplitC γ (RFun x1 i1 t1 t1')
+                              (RFun x2 i2 t2 t2')
         let t1x2' = t1' `F.subst1` (x1, F.EVar x2)
         cs''     <- splitC allowTC  (SubC γ' t1x2' t2')
         return    $ cs ++ cs' ++ cs''
@@ -277,7 +277,7 @@ traceTy (RVar v _)      = parens ("RVar " ++ showpp v)
 traceTy (RApp c ts _ _) = parens ("RApp " ++ showpp c ++ unwords (traceTy <$> ts))
 traceTy (RAllP _ t)     = parens ("RAllP " ++ traceTy t)
 traceTy (RAllT _ t _)   = parens ("RAllT " ++ traceTy t)
-traceTy (RFun _ _ t t' _) = parens ("RFun " ++ parens (traceTy t) ++ parens (traceTy t'))
+traceTy (RFun _ _ t t') = parens ("RFun " ++ parens (traceTy t) ++ parens (traceTy t'))
 traceTy (RAllE _ tx t)  = parens ("RAllE " ++ parens (traceTy tx) ++ parens (traceTy t))
 traceTy (REx _ tx t)    = parens ("REx " ++ parens (traceTy tx) ++ parens (traceTy t))
 traceTy (RExprArg _)    = "RExprArg"
@@ -364,7 +364,6 @@ refaConjuncts p = [p' | p' <- F.conjuncts p, not $ F.isTautoPred p']
 replaceTop :: SpecType -> F.SortedReft -> SpecType
 replaceTop (RApp c ts rs r) r'  = RApp c ts rs $ replaceReft r r'
 replaceTop (RVar a r) r'        = RVar a       $ replaceReft r r'
-replaceTop (RFun b i t1 t2 r) r' = RFun b i t1 t2 $ replaceReft r r'
 replaceTop (RAppTy t1 t2 r) r'  = RAppTy t1 t2 $ replaceReft r r'
 replaceTop (RAllT a t r)    r'  = RAllT a t    $ replaceReft r r'
 replaceTop t _                  = t
@@ -416,12 +415,12 @@ forallExprReft γ r =
 forallExprReft_ :: CGEnv -> (F.Expr, [F.Expr]) -> Maybe F.Reft
 forallExprReft_ γ (F.EVar x, [])
   = case forallExprReftLookup γ x of
-      Just (_,_,_,_,t)  -> Just $ F.sr_reft $ rTypeSortedReft (emb γ) t
+      Just (_,_,_,t)  -> Just $ F.sr_reft $ rTypeSortedReft (emb γ) t
       Nothing         -> Nothing
 
 forallExprReft_ γ (F.EVar f, es)
   = case forallExprReftLookup γ f of
-      Just (xs,_,_,_,t) -> let su = F.mkSubst $ safeZip "fExprRefType" xs es in
+      Just (xs,_,_,t) -> let su = F.mkSubst $ safeZip "fExprRefType" xs es in
                        Just $ F.subst su $ F.sr_reft $ rTypeSortedReft (emb γ) t
       Nothing       -> Nothing
 
@@ -431,10 +430,10 @@ forallExprReft_ _ _
 -- forallExprReftLookup :: CGEnv -> F.Symbol -> Int
 forallExprReftLookup :: CGEnv
                      -> F.Symbol
-                     -> Maybe ([F.Symbol], [RFInfo], [SpecType], [RReft], SpecType)
+                     -> Maybe ([F.Symbol], [RFInfo], [SpecType], SpecType)
 forallExprReftLookup γ sym = snap <$> F.lookupSEnv sym (syenv γ)
   where
-    snap     = mapFifth5 ignoreOblig . (\((x,a,b,c),t)->(x,a,b,c,t)) . bkArrow . thd3 . bkUniv . lookup'
+    snap     = mapFourth4 ignoreOblig . (\((x,a,b),t)->(x,a,b,t)) . bkArrow . thd3 . bkUniv . lookup'
     lookup' z = fromMaybe (panicUnbound γ z) (γ ?= F.symbol z)
 
 

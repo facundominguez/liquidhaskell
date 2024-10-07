@@ -83,7 +83,7 @@ trueRefType allowTC (RAllT α t r)
 trueRefType allowTC (RAllP π t)
   = RAllP π <$> true allowTC t
 
-trueRefType allowTC (RFun _ _ t t' _)
+trueRefType allowTC (RFun _ _ t t')
   -- YL: attaching rfinfo here is crucial
   = rFun' (classRFInfo allowTC) <$> fresh <*> true allowTC t <*> true allowTC t'
 
@@ -132,9 +132,9 @@ refreshRefType allowTC (RAllT α t r)
 refreshRefType allowTC (RAllP π t)
   = RAllP π <$> refresh allowTC t
 
-refreshRefType allowTC (RFun sym i t t' _)
-  | sym == F.dummySymbol = (\b t1 t2 -> RFun b i t1 t2 mempty) <$> fresh <*> refresh allowTC t <*> refresh allowTC t'
-  | otherwise          = (\t1 t2 -> RFun sym i t1 t2 mempty)   <$> refresh allowTC t <*> refresh allowTC t'
+refreshRefType allowTC (RFun sym i t t')
+  | sym == F.dummySymbol = (\b t1 t2 -> RFun b i t1 t2) <$> fresh <*> refresh allowTC t <*> refresh allowTC t'
+  | otherwise          = (\t1 t2 -> RFun sym i t1 t2) <$> refresh allowTC t <*> refresh allowTC t'
 
 refreshRefType _ (RApp rc ts _ _) | isClass rc
   = return $ rRCls rc ts
@@ -192,10 +192,10 @@ refreshVV (REx x t1 t2) = do
   t2' <- refreshVV t2
   shiftVV (REx x t1' t2') <$> fresh
 
-refreshVV (RFun x i t1 t2 r) = do
+refreshVV (RFun x i t1 t2) = do
   t1' <- refreshVV t1
   t2' <- refreshVV t2
-  shiftVV (RFun x i t1' t2' r) <$> fresh
+  return (RFun x i t1' t2')
 
 refreshVV (RAppTy t1 t2 r) = do
   t1' <- refreshVV t1
@@ -236,16 +236,14 @@ refreshArgsSub t
        let sus = F.mkSubst <$> L.inits (zip xs (F.EVar <$> xs'))
        let su  = last sus
        ts'    <- mapM refreshPs $ zipWith F.subst sus ts
-       let rs' = zipWith F.subst sus rs
        tr     <- refreshPs $ F.subst su tbd
-       let t'  = fromRTypeRep $ trep {ty_binds = xs', ty_args = ts', ty_res = tr, ty_refts = rs'}
+       let t'  = fromRTypeRep $ trep {ty_binds = xs', ty_args = ts', ty_res = tr}
        return (t', su)
     where
        trep    = toRTypeRep t
        xs      = ty_binds trep
        ts_u    = ty_args  trep
        tbd     = ty_res   trep
-       rs      = ty_refts trep
 
 refreshPs :: (FreshM m) => SpecType -> m SpecType
 refreshPs = mapPropM go

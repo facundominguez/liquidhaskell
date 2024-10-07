@@ -65,8 +65,8 @@ makeTermEnvs :: CGEnv -> [(GHC.Var, [F.Located F.Expr])] -> [(GHC.Var, GHC.CoreE
 makeTermEnvs γ xtes xes ts ts' = setTRec γ . zip xs <$> rts
   where
     vs   = zipWith collectArgs' ts ces
-    syms = fst5 . bkArrowDeep <$> ts
-    syms' = fst5 . bkArrowDeep <$> ts'
+    syms = (\(x, _, _, _) -> x) . bkArrowDeep <$> ts
+    syms' = (\(x, _, _, _) -> x) . bkArrowDeep <$> ts'
     sus' = zipWith mkSub syms syms'
     sus  = zipWith mkSub syms ((F.symbol <$>) <$> vs)
     ess  = (\x -> safeFromJust (err x) (x `L.lookup` xtes)) <$> xs
@@ -83,8 +83,8 @@ addObligation :: Oblig -> SpecType -> RReft -> SpecType
 addObligation o t r  = mkArrow αs πs xts $ RRTy [] r o t2
   where
     (αs, πs, t1) = bkUniv t
-    ((xs, is, ts, rs), t2) = bkArrow t1
-    xts              = zip4 xs is ts rs
+    ((xs, is, ts), t2) = bkArrow t1
+    xts              = zip3 xs is ts
 
 --------------------------------------------------------------------------------
 -- | TERMINATION TYPE ----------------------------------------------------------
@@ -160,7 +160,7 @@ makeRecType autoenv t vs dxs is
 unOCons :: RType c tv r -> RType c tv r
 unOCons (RAllT v t r)      = RAllT v (unOCons t) r
 unOCons (RAllP p t)        = RAllP p $ unOCons t
-unOCons (RFun x i tx t r)  = RFun x i (unOCons tx) (unOCons t) r
+unOCons (RFun x i tx t)  = RFun x i (unOCons tx) (unOCons t)
 unOCons (RRTy _ _ OCons t) = unOCons t
 unOCons t                  = t
 
@@ -168,7 +168,7 @@ mergecondition :: RType c tv r -> RType c tv r -> RType c tv r
 mergecondition (RAllT _ t1 _)       (RAllT v t2 r2)        = RAllT v (mergecondition t1 t2) r2
 mergecondition (RAllP _ t1)         (RAllP p t2)           = RAllP p (mergecondition t1 t2)
 mergecondition (RRTy xts r OCons t1) t2                    = RRTy xts r OCons (mergecondition t1 t2)
-mergecondition (RFun _ _ t11 t12 _) (RFun x2 i t21 t22 r2) = RFun x2 i (mergecondition t11 t21) (mergecondition t12 t22) r2
+mergecondition (RFun _ _ t11 t12) (RFun x2 i t21 t22) = RFun x2 i (mergecondition t11 t21) (mergecondition t12 t22)
 mergecondition _                     t                     = t
 
 safeLogIndex :: Error -> [a] -> Int -> CG (Maybe a)
