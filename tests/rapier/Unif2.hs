@@ -101,25 +101,13 @@ type ScopedTerm S = {t:Term | isSubsetOf (freeVars t) S}
 
 -- | Replaces existential variables with skolem functions
 --
--- TODO: bug:
---
--- > skolemize
--- >   (Conj
--- >     (Forall 1 $ Exists 0 $ V 0 `Eq` V 1)
--- >     (Forall 2 $ Exists 0 $ V 0 `Eq` V 2)
--- >   )
--- > ==
--- >   Conj
--- >     (Forall 1 $ SA (0, [(1, V 1)]) `Eq` V 1)
--- >     (Forall 2 $ SA (0, [(2, V 2)]) `Eq` V 2)
---
--- Existentials in different conjuncts should not share the same skolem
--- function.
+-- It also has the side effect of renaming universally quantified variables that
+-- are bound more than once.
 skolemize
   :: Set Int -- the set of variables that can appear free in the input formula
   -> Formula
   -> Formula
-skolemize scope0 = go scope0 Map.empty []
+skolemize scope0 ff0 = evalState (go Map.empty [] ff0) Set.empty
   where
     -- scope is the set of variables that can appear free in f0
     --
@@ -127,42 +115,40 @@ skolemize scope0 = go scope0 Map.empty []
     -- it with
     --
     -- uvs are the universally quantified variables in scope
-    go scope eenv uvs f0 = case f0 of
+    go eenv uvs f0 = get >>= \scope -> case f0 of
       Forall v f
-        | Set.member v scope ->
+        | Set.member v scope -> do
           -- if v is already in the scope, we rename it to avoid name capture
           let u = freshVar scope
               scope' = Set.insert u scope
               f' = substituteFormula scope' (fromListSubst [(v, V u)]) f
-           in
-              Forall u (go scope' eenv (u : uvs) f')
-        | otherwise ->
-           let scope' = Set.insert v scope
-            in
-               Forall v (go scope' eenv (v : uvs) f)
+          put scope'
+          Forall u <$> go eenv (u : uvs) f'
+        | otherwise -> do
+           put (Set.insert v scope)
+           Forall v <$> go eenv (v : uvs) f
 
       Exists v f
-        | Set.member v scope ->
+        | Set.member v scope -> do
           -- if v is already in the scope, we rename it to avoid confusing
           -- skolem functions that correspond to different variables
           let u = freshVar scope
               scope' = Set.insert u scope
               f' = substituteFormula scope' (fromListSubst [(v, V u)]) f
               eenv' = Map.insert u (mkSkolemApp u uvs) eenv
-           in
-              go scope' eenv' uvs f'
-        | otherwise ->
-           let scope' = Set.insert v scope
-               eenv' = Map.insert v (mkSkolemApp v uvs) eenv
-           in
-              go scope' eenv' uvs f
+          put scope'
+          go eenv' uvs f'
+        | otherwise -> do
+           let eenv' = Map.insert v (mkSkolemApp v uvs) eenv
+           modify (Set.insert v)
+           go eenv' uvs f
 
-      Conj f1 f2 -> Conj (go scope eenv uvs f1) (go scope eenv uvs f2)
-      Then f1 f2 -> Then (go scope eenv uvs f1) (go scope eenv uvs f2)
-      Eq t0 t1 ->
+      Conj f1 f2 -> Conj <$> go eenv uvs f1 <*> go eenv uvs f2
+      Then f1 f2 -> Then <$> go eenv uvs f1 <*> go eenv uvs f2
+      Eq t0 t1 -> do
         let s = fromListSubst (Map.toList eenv)
             -- substitute variables with the skolem functions
-         in Eq (substitute s t0) (substitute s t1)
+         in pure $ Eq (substitute s t0) (substitute s t1)
 
 -- | @mkSkolemApp v uvs@ makes a term with a skolem application for the
 -- existential variable @v@ and the universally quantified variables in
@@ -215,12 +201,20 @@ tf0 :: Formula
 tf0 = Forall 0 $ Exists 1 $ V 1 `Eq` V 0
 
 tf1 :: Formula
-tf1 = Forall 0 $ Exists 1 $ Forall 2 $
-        (V 1 `Eq` V 0) `Conj` (Exists 1 $ V 1 `Eq` V 2)
+tf1 =
+  Forall 0 $ Exists 1 $ Forall 2 $
+    (V 1 `Eq` V 0) `Conj` (Exists 1 $ V 1 `Eq` V 2)
 
 tf2 :: Formula
-tf2 = Forall 0 $ Exists 1 $
-        (V 1 `Eq` V 0) `Conj` (Forall 2 $ Exists 1 $ V 1 `Eq` V 2)
+tf2 =
+  Forall 0 $ Exists 1 $
+    (V 1 `Eq` V 0) `Conj` (Forall 2 $ Exists 1 $ V 1 `Eq` V 2)
+
+tf3 :: Formula
+tf3 =
+  Conj
+    (Forall 1 $ Exists 0 $ V 0 `Eq` V 1)
+    (Forall 2 $ Exists 0 $ V 0 `Eq` V 2)
 
 
 -- removal of implications and computation of prenex normal form still needs to
