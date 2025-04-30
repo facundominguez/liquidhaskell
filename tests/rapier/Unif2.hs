@@ -99,56 +99,69 @@ type ScopedTerm S = {t:Term | isSubsetOf (freeVars t) S}
 -- eliminating existential quantification via skolemization and removing
 -- implications via substitution and injectivity of term constructors.
 
+-- | Rename universal and existential variables when they are bound more than
+-- once.
+--
+rename
+  :: Set Int -- the set of variables that can appear free in the input formula
+  -> Formula
+  -> Formula
+rename scope0 ff0 = evalState (go ff0) Set.empty
+  where
+    go f0 = get >>= \bs -> case f0 of
+      Forall v f
+        | Set.member v bs -> do
+          -- if v is already in the bound set, we rename it
+          let u = freshVar bs
+              bs' = Set.insert u bs
+              f' = substituteFormula bs' (fromListSubst [(v, V u)]) f
+          put bs'
+          Forall u <$> go f'
+        | otherwise -> do
+           put (Set.insert v bs)
+           Forall v <$> go f
+
+      Exists v f
+        | Set.member v bs -> do
+          -- if v is already in the bound set, we rename it
+          let u = freshVar bs
+              bs' = Set.insert u bs
+              f' = substituteFormula bs' (fromListSubst [(v, V u)]) f
+          put bs'
+          Exists u <$> go f'
+        | otherwise -> do
+           modify (Set.insert v)
+           Exists v <$> go f
+
+      Conj f1 f2 -> Conj <$> go f1 <*> go f2
+      Then f1 f2 -> Then <$> go f1 <*> go f2
+      Eq t0 t1 -> pure $ Eq t0 t1
+
 -- | Replaces existential variables with skolem functions
 --
 -- It also has the side effect of renaming universally quantified variables that
 -- are bound more than once.
-skolemize
-  :: Set Int -- the set of variables that can appear free in the input formula
-  -> Formula
-  -> Formula
-skolemize scope0 ff0 = evalState (go Map.empty [] ff0) Set.empty
+skolemize :: Formula -> Formula
+skolemize = go Map.empty []
   where
-    -- scope is the set of variables that can appear free in f0
-    --
     -- eenv tells for every existential variable the skolem function to replace
     -- it with
     --
     -- uvs are the universally quantified variables in scope
-    go eenv uvs f0 = get >>= \scope -> case f0 of
-      Forall v f
-        | Set.member v scope -> do
-          -- if v is already in the scope, we rename it to avoid name capture
-          let u = freshVar scope
-              scope' = Set.insert u scope
-              f' = substituteFormula scope' (fromListSubst [(v, V u)]) f
-          put scope'
-          Forall u <$> go eenv (u : uvs) f'
-        | otherwise -> do
-           put (Set.insert v scope)
-           Forall v <$> go eenv (v : uvs) f
+    go eenv uvs f0 = case f0 of
+      Forall v f ->
+        Forall v $ go eenv (v : uvs) f
 
-      Exists v f
-        | Set.member v scope -> do
-          -- if v is already in the scope, we rename it to avoid confusing
-          -- skolem functions that correspond to different variables
-          let u = freshVar scope
-              scope' = Set.insert u scope
-              f' = substituteFormula scope' (fromListSubst [(v, V u)]) f
-              eenv' = Map.insert u (mkSkolemApp u uvs) eenv
-          put scope'
-          go eenv' uvs f'
-        | otherwise -> do
-           let eenv' = Map.insert v (mkSkolemApp v uvs) eenv
-           modify (Set.insert v)
-           go eenv' uvs f
+      Exists v f ->
+        let eenv' = Map.insert v (mkSkolemApp v uvs) eenv
+         in go eenv' uvs f
 
-      Conj f1 f2 -> Conj <$> go eenv uvs f1 <*> go eenv uvs f2
-      Then f1 f2 -> Then <$> go eenv uvs f1 <*> go eenv uvs f2
+      Conj f1 f2 -> Conj (go eenv uvs f1) (go eenv uvs f2)
+      Then f1 f2 -> Then (go eenv uvs f1) (go eenv uvs f2)
       Eq t0 t1 -> do
         let s = fromListSubst (Map.toList eenv)
             -- substitute variables with the skolem functions
-         in pure $ Eq (substitute s t0) (substitute s t1)
+         in Eq (substitute s t0) (substitute s t1)
 
 -- | @mkSkolemApp v uvs@ makes a term with a skolem application for the
 -- existential variable @v@ and the universally quantified variables in
