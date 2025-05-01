@@ -208,28 +208,6 @@ substituteFormula scope s = \case
     Then f1 f2 -> Then (substituteFormula scope s f1) (substituteFormula scope s f2)
     Eq t0 t1 -> Eq (substitute s t0) (substitute s t1)
 
--- Test formulas
-
-tf0 :: Formula
-tf0 = Forall 0 $ Exists 1 $ V 1 `Eq` V 0
-
-tf1 :: Formula
-tf1 =
-  Forall 0 $ Exists 1 $ Forall 2 $
-    (V 1 `Eq` V 0) `Conj` (Exists 1 $ V 1 `Eq` V 2)
-
-tf2 :: Formula
-tf2 =
-  Forall 0 $ Exists 1 $
-    (V 1 `Eq` V 0) `Conj` (Forall 2 $ Exists 1 $ V 1 `Eq` V 2)
-
-tf3 :: Formula
-tf3 =
-  Conj
-    (Forall 1 $ Exists 0 $ V 0 `Eq` V 1)
-    (Forall 2 $ Exists 0 $ V 0 `Eq` V 2)
-
-
 -- | @toPrenex f@ transforms a formula into prenex normal form by moving all
 -- the universal quantifiers to the front.
 toPrenex :: Formula -> Formula
@@ -252,5 +230,94 @@ toPrenex f0 =
     go f@(Eq {}) = ([], f)
 
 
--- removal of implications still needs to be implemented.
+-- | Transforms occurrences of @Conj a b `Then` c@ to @a `Then` b `Then` c@
+-- repeatedly
+conjunctionsToImplications :: Formula -> Formula
+conjunctionsToImplications = go
+  where
+    go (Forall v f) = Forall v (go f)
+    go (Exists v f) = Exists v (go f)
+    go (Conj f1 f2) = Conj (go f1) (go f2)
+    go (Then f1 f2) = foldr Then f2 $ collectConjuncts (go f1)
+    go f@(Eq {}) = f
 
+    collectConjuncts :: Formula -> [Formula]
+    collectConjuncts (Conj f1 f2) = collectConjuncts f1 ++ collectConjuncts f2
+    collectConjuncts f = [f]
+
+-- | Removes implications from the formula by substituting in the consequent
+--
+-- @x == t `Then` f@ becomes @f[x:=t]@
+removeImplications :: Formula -> Formula
+removeImplications = go
+  where
+    go (Forall v f) = Forall v (go f)
+    go (Exists v f) = Exists v (go f)
+    go (Conj f1 f2) = Conj (go f1) (go f2)
+    go (Then f1 f2) =
+      case go f1 of
+        -- The scope of the substitution is empty since we don't expect
+        -- quantifiers in f or f2. This is a hack, but a hack that acommplishes
+        -- the same as computing the appropriate scope.
+        Eq (V v) f -> go $ substituteFormula mempty (fromListSubst [(v, f)]) f2
+        Eq f (V v) -> go $ substituteFormula mempty (fromListSubst [(v, f)]) f2
+        Eq U U -> go f2
+        Eq (L t1) (L t2) -> go $ Then (Eq t1 t2) f2
+        Eq (P ta1 ta2) (P tb1 tb2) -> go $ Then (Eq ta1 ta2) $ Then (Eq tb1 tb2) f2
+        f1'@(Eq SA{} _) -> Then f1' $ go f2
+        f1'@(Eq _ SA{}) -> Then f1' $ go f2
+        Eq _ _ -> Eq U U
+        f1' -> Then f1' $ go f2
+    go f@(Eq {}) = f
+
+-- | Removes constructors from equalities
+removeConstructors :: Formula -> Formula
+removeConstructors = go
+  where
+    go (Forall v f) = Forall v (go f)
+    go (Exists v f) = Exists v (go f)
+    go (Conj f1 f2) = Conj (go f1) (go f2)
+    go (Then f1 f2) = Then (go f1) (go f2)
+    go f =
+      case f of
+        Eq (L t1) (L t2) -> go $ Eq t1 t2
+        Eq (P ta1 ta2) (P tb1 tb2) -> go $ Conj (Eq ta1 ta2) (Eq tb1 tb2)
+        _ -> f
+
+--- | Normalizes a formula clauses in prenex normal form
+normalize :: Formula -> Formula
+normalize =
+  removeConstructors .
+  removeImplications .
+  conjunctionsToImplications .
+  toPrenex .
+  skolemize .
+  rename Set.empty
+
+-- Test formulas
+
+tf0 :: Formula
+tf0 = Forall 0 $ Exists 1 $ V 1 `Eq` V 0
+
+tf1 :: Formula
+tf1 =
+  Forall 0 $ Exists 1 $ Forall 2 $
+    (V 1 `Eq` V 0) `Conj` (Exists 1 $ V 1 `Eq` V 2)
+
+tf2 :: Formula
+tf2 =
+  Forall 0 $ Exists 1 $
+    (V 1 `Eq` V 0) `Conj` (Forall 2 $ Exists 1 $ V 1 `Eq` V 2)
+
+tf3 :: Formula
+tf3 =
+  Conj
+    (Forall 1 $ Exists 0 $ V 0 `Eq` V 1)
+    (Forall 2 $ Exists 0 $ V 0 `Eq` V 2)
+
+tf4 :: Formula
+tf4 = Forall 0 $ Forall 1 $
+  Eq (V 0) (L (V 1)) `Then` Exists 2 (Eq (V 0) (L (V 2)))
+
+
+-- unification still needs to be implemented
