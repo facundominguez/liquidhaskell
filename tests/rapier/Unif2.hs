@@ -230,6 +230,27 @@ tf3 =
     (Forall 2 $ Exists 0 $ V 0 `Eq` V 2)
 
 
--- removal of implications and computation of prenex normal form still needs to
--- be implemented.
+-- | @toPrenex f@ transforms a formula into prenex normal form by moving all
+-- the universal quantifiers to the front.
+toPrenex :: Formula -> Formula
+toPrenex f0 =
+    let (vs, f') = go f0
+     in foldr Forall f' vs
+  where
+    go (Forall v f) =
+      let (vs, f') = go f
+       in (v : vs, f')
+    go (Exists v f) = error "toPrenex: unexpected"
+    go (Conj f1 f2) =
+      let (vs1, f1') = go f1
+          (vs2, f2') = go f2
+       in (vs1 ++ vs2, Conj f1' f2')
+    go (Then f1 f2) =
+      let (vs1, f1') = go f1
+          (vs2, f2') = go f2
+       in (vs1 ++ vs2, Then f1' f2')
+    go f@(Eq {}) = ([], f)
+
+
+-- removal of implications still needs to be implemented.
 
