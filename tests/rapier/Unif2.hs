@@ -11,6 +11,7 @@ import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Set (Set)
 import Data.Set qualified as Set
+import Debug.Trace qualified
 
 -- | We have plain variables
 type Var = Int
@@ -230,7 +231,7 @@ toPrenex f0 =
     go f@(Eq {}) = ([], f)
 
 
--- | Transforms occurrences of @Conj a b `Then` c@ to @a `Then` b `Then` c@
+-- | Transforms occurrences of @a && b -> c@ to @a -> b -> c@
 -- repeatedly
 conjunctionsToImplications :: Formula -> Formula
 conjunctionsToImplications = go
@@ -247,7 +248,7 @@ conjunctionsToImplications = go
 
 -- | Removes implications from the formula by substituting in the consequent
 --
--- @x == t `Then` f@ becomes @f[x:=t]@
+-- @x == t -> f@ becomes @f[x:=t]@
 removeImplications :: Formula -> Formula
 removeImplications = go
   where
@@ -271,6 +272,8 @@ removeImplications = go
     go f@(Eq {}) = f
 
 -- | Removes constructors from equalities
+--
+-- @P a b == P c d -> e@ becomes @a == c -> b == d -> e@
 removeConstructors :: Formula -> Formula
 removeConstructors = go
   where
@@ -284,15 +287,99 @@ removeConstructors = go
         Eq (P ta1 ta2) (P tb1 tb2) -> go $ Conj (Eq ta1 ta2) (Eq tb1 tb2)
         _ -> f
 
---- | Normalizes a formula clauses in prenex normal form
-normalize :: Formula -> Formula
-normalize =
-  removeConstructors .
-  removeImplications .
-  conjunctionsToImplications .
-  toPrenex .
-  skolemize .
-  rename Set.empty
+-- | Assign terms to skolem functions
+--
+-- @unify (t == SA (i, s))@ is @[(i, substitute (inverseSubst s) t)@
+unify :: Formula -> [(Int, Term)]
+unify = go
+  where
+    go (Forall v f) = go f
+    go (Exists v f) = go f
+    go (Conj f1 f2) = go f1 ++ go f2
+    go (Then f1 f2) = go f2
+    go f = case f of
+      Eq t (SA (i, s)) ->
+         case inverseSubst $ narrowSubst (freeVars t) s of
+           Nothing -> []
+           Just s' -> [(i, substitute s' t)]
+      Eq (SA (i, s)) t ->
+         case inverseSubst $ narrowSubst (freeVars t) s of
+           Nothing -> []
+           Just s' -> [(i, substitute s' t)]
+      _ -> []
+
+narrowSubst :: Set Int -> Subst Term -> Subst Term
+narrowSubst s (Subst xs) =
+  Subst [(i, t) | (i, t) <- xs, Set.member i s]
+
+inverseSubst :: Subst Term -> Maybe (Subst Term)
+inverseSubst (Subst xs) = Subst <$> go xs
+  where
+    go [] = Just []
+    go ((i, t) : xs) =
+      case t of
+        V j -> ((j, V i) :) <$> go xs
+        _ -> Nothing
+
+--- | Assign terms to existential variables in an attempt to make a formula
+-- true.
+unifyFormula :: Formula -> [(Int, Term)]
+unifyFormula =
+    traceUnify
+          "                     unify" .
+    unify .
+    trace "        removeConstructors" .
+    removeConstructors .
+    trace "        removeImplications" .
+    removeImplications .
+    trace "conjunctionsToImplications" .
+    conjunctionsToImplications .
+    trace "                  toPrenex" .
+    toPrenex .
+    trace "                 skolemize" .
+    skolemize .
+    trace "                    rename" .
+    rename Set.empty .
+    trace "                   initial"
+  where
+    trace :: String -> Formula -> Formula
+    trace label f = Debug.Trace.trace (label ++ ": " ++ ppFormula prettyName f) f
+    traceUnify :: String -> [(Int, Term)] -> [(Int, Term)]
+    traceUnify label xs = Debug.Trace.trace (label ++ ": " ++ showUnification xs) xs
+    showUnification :: [(Int, Term)] -> String
+    showUnification xs =
+      let xs' = map (\(i, t) -> (prettyName i, ppTerm prettyName t)) xs
+       in "[" ++ List.intercalate ", " (map (\(i, t) -> i ++ ":=" ++ t) xs') ++ "]"
+
+-- pretty printing
+
+-- | Pretty print a variable name
+prettyName :: Int -> String
+prettyName = ((["x", "y", "z", "u", "v", "w"] ++ [ "v" ++ show i | i <- [1..] ]) !!)
+
+-- | Pretty print a formula
+ppFormula :: (Int -> String) -> Formula -> String
+ppFormula vnames = go
+  where
+    go (Forall v f) = "∀" ++ (vnames v) ++ ". " ++ go f
+    go (Exists v f) = "∃" ++ (vnames v) ++ ". " ++ go f
+    go (Conj f1 f2) = "(" ++ go f1 ++ ") ∧ (" ++ go f2 ++ ")"
+    go (Then f1 f2) = go f1 ++ " → " ++ go f2
+    go (Eq t0 t1) = ppTerm vnames t0 ++ " == " ++ ppTerm vnames t1
+
+ppTerm :: (Int -> String) -> Term -> String
+ppTerm vnames t =
+  case t of
+    V i -> vnames i
+    SA (i, s) -> vnames i ++ ppSubst vnames s
+    U -> "U"
+    L t1 -> "L(" ++ ppTerm vnames t1 ++ ")"
+    P t1 t2 -> "P(" ++ ppTerm vnames t1 ++ ", " ++ ppTerm vnames t2 ++ ")"
+
+ppSubst :: (Int -> String) -> Subst Term -> String
+ppSubst vnames (Subst xs) =
+  "[" ++ List.intercalate ", " (map (\(i, t) -> vnames i ++ ":=" ++ ppTerm vnames t) xs) ++ "]"
+
 
 -- Test formulas
 
@@ -318,6 +405,3 @@ tf3 =
 tf4 :: Formula
 tf4 = Forall 0 $ Forall 1 $
   Eq (V 0) (L (V 1)) `Then` Exists 2 (Eq (V 0) (L (V 2)))
-
-
--- unification still needs to be implemented
