@@ -204,7 +204,22 @@ substituteFormula scope s = \case
             f' = substituteFormula scope' s' f
          in
             Forall v f'
-    Exists v f -> Exists v (substituteFormula scope s f)
+    Exists v f
+      | Set.member v scope ->
+        let u = freshVar scope
+            scope' = Set.insert u scope
+            s' = extendSubst s v (V u)
+            f' = substituteFormula scope' s' f
+         in
+            Exists u f'
+      | otherwise ->
+        let scope' = Set.insert v scope
+            -- This has the effect of canceling the substitution of v
+            -- whatever it was in s
+            s' = extendSubst s v (V v)
+            f' = substituteFormula scope' s' f
+         in
+            Exists v f'
     Conj f1 f2 -> Conj (substituteFormula scope s f1) (substituteFormula scope s f2)
     Then f1 f2 -> Then (substituteFormula scope s f1) (substituteFormula scope s f2)
     Eq t0 t1 -> Eq (substitute s t0) (substitute s t1)
@@ -405,3 +420,10 @@ tf3 =
 tf4 :: Formula
 tf4 = Forall 0 $ Forall 1 $
   Eq (V 0) (L (V 1)) `Then` Exists 2 (Eq (V 0) (L (V 2)))
+
+tf5 :: Formula
+tf5 = Forall 0 $ Forall 1 $
+  Eq (V 0) (L (V 1)) `Then` Forall 1 (Eq (V 1) (V 0) `Then` Exists 2 (Eq (V 1) (L (V 2))))
+
+tf6 :: Formula
+tf6 = Forall 0 $ Forall 0 $ Exists 1 (Eq (V 1) (V 0))
