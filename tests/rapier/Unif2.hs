@@ -64,7 +64,9 @@ data Term
 data Formula
   = Eq Term Term
   | Conj Formula Formula
-  | Then Formula Formula
+    -- | The implication form is constrained to allow only one
+    -- equality in the antecedent.
+  | Then (Term, Term) Formula
   | Exists Var Formula
   | Forall Var Formula
   deriving Show
@@ -135,7 +137,7 @@ rename scope0 ff0 = evalState (go ff0) Set.empty
            Exists v <$> go f
 
       Conj f1 f2 -> Conj <$> go f1 <*> go f2
-      Then f1 f2 -> Then <$> go f1 <*> go f2
+      Then eq1 f2 -> Then eq1 <$> go f2
       Eq t0 t1 -> pure $ Eq t0 t1
 
 -- | Replaces existential variables with skolem functions
@@ -158,7 +160,10 @@ skolemize = go Map.empty []
          in go eenv' uvs f
 
       Conj f1 f2 -> Conj (go eenv uvs f1) (go eenv uvs f2)
-      Then f1 f2 -> Then (go eenv uvs f1) (go eenv uvs f2)
+      Then (t0, t1) f2 ->
+        let s = fromListSubst (Map.toList eenv)
+            -- substitute variables with the skolem functions
+         in Then (substitute s t0, substitute s t1) (go eenv uvs f2)
       Eq t0 t1 -> do
         let s = fromListSubst (Map.toList eenv)
             -- substitute variables with the skolem functions
@@ -221,7 +226,8 @@ substituteFormula scope s = \case
          in
             Exists v f'
     Conj f1 f2 -> Conj (substituteFormula scope s f1) (substituteFormula scope s f2)
-    Then f1 f2 -> Then (substituteFormula scope s f1) (substituteFormula scope s f2)
+    Then (t0, t1) f2 ->
+      Then (substitute s t0, substitute s t1) (substituteFormula scope s f2)
     Eq t0 t1 -> Eq (substitute s t0) (substitute s t1)
 
 -- | @toPrenex f@ transforms a formula into prenex normal form by moving all
@@ -239,27 +245,9 @@ toPrenex f0 =
       let (vs1, f1') = go f1
           (vs2, f2') = go f2
        in (vs1 ++ vs2, Conj f1' f2')
-    go (Then f1 f2) =
-      let (vs1, f1') = go f1
-          (vs2, f2') = go f2
-       in (vs1 ++ vs2, Then f1' f2')
+    go (Then eq1 f2) = Then eq1 <$> go f2
     go f@(Eq {}) = ([], f)
 
-
--- | Transforms occurrences of @a && b -> c@ to @a -> b -> c@
--- repeatedly
-conjunctionsToImplications :: Formula -> Formula
-conjunctionsToImplications = go
-  where
-    go (Forall v f) = Forall v (go f)
-    go (Exists v f) = Exists v (go f)
-    go (Conj f1 f2) = Conj (go f1) (go f2)
-    go (Then f1 f2) = foldr Then f2 $ collectConjuncts (go f1)
-    go f@(Eq {}) = f
-
-    collectConjuncts :: Formula -> [Formula]
-    collectConjuncts (Conj f1 f2) = collectConjuncts f1 ++ collectConjuncts f2
-    collectConjuncts f = [f]
 
 -- | Removes implications from the formula by substituting in the consequent
 --
@@ -270,20 +258,19 @@ removeImplications = go
     go (Forall v f) = Forall v (go f)
     go (Exists v f) = Exists v (go f)
     go (Conj f1 f2) = Conj (go f1) (go f2)
-    go (Then f1 f2) =
-      case go f1 of
+    go (Then eq1 f2) =
+      case eq1 of
         -- The scope of the substitution is empty since we don't expect
-        -- quantifiers in f or f2. This is a hack, but a hack that acommplishes
+        -- quantifiers in f or f2. This is a hack, but a hack that acomplishes
         -- the same as computing the appropriate scope.
-        Eq (V v) f -> go $ substituteFormula mempty (fromListSubst [(v, f)]) f2
-        Eq f (V v) -> go $ substituteFormula mempty (fromListSubst [(v, f)]) f2
-        Eq U U -> go f2
-        Eq (L t1) (L t2) -> go $ Then (Eq t1 t2) f2
-        Eq (P ta1 ta2) (P tb1 tb2) -> go $ Then (Eq ta1 ta2) $ Then (Eq tb1 tb2) f2
-        f1'@(Eq SA{} _) -> Then f1' $ go f2
-        f1'@(Eq _ SA{}) -> Then f1' $ go f2
-        Eq _ _ -> Eq U U
-        f1' -> Then f1' $ go f2
+        (V v, t) -> go $ substituteFormula mempty (fromListSubst [(v, t)]) f2
+        (t, V v) -> go $ substituteFormula mempty (fromListSubst [(v, t)]) f2
+        (U, U) -> go f2
+        (L t1, L t2) -> go $ Then (t1, t2) f2
+        (P ta1 ta2, P tb1 tb2) -> go $ Then (ta1, ta2) $ Then (tb1, tb2) f2
+        (SA{}, _) -> Then eq1 $ go f2
+        (_, SA{}) -> Then eq1 $ go f2
+        _ -> Eq U U
     go f@(Eq {}) = f
 
 -- | Removes constructors from equalities
@@ -295,12 +282,16 @@ removeConstructors = go
     go (Forall v f) = Forall v (go f)
     go (Exists v f) = Exists v (go f)
     go (Conj f1 f2) = Conj (go f1) (go f2)
-    go (Then f1 f2) = Then (go f1) (go f2)
-    go f =
-      case f of
-        Eq (L t1) (L t2) -> go $ Eq t1 t2
-        Eq (P ta1 ta2) (P tb1 tb2) -> go $ Conj (Eq ta1 ta2) (Eq tb1 tb2)
-        _ -> f
+    go (Then (t0, t1) f2) =
+      foldr Then (go f2) $ goEq t0 t1
+    go (Eq t0 t1) = case goEq t0 t1 of
+      [] -> Eq U U
+      xs -> foldr1 Conj $ map (uncurry Eq) xs
+
+    goEq :: Term -> Term -> [(Term, Term)]
+    goEq (L t1) (L t2) = goEq t1 t2
+    goEq (P ta1 ta2) (P tb1 tb2) = goEq ta1 ta2 ++ goEq tb1 tb2
+    goEq t0 t1 = [(t0, t1)]
 
 -- | Assign terms to skolem functions
 --
@@ -311,17 +302,20 @@ unify = go
     go (Forall v f) = go f
     go (Exists v f) = go f
     go (Conj f1 f2) = go f1 ++ go f2
-    go (Then f1 f2) = go f2
-    go f = case f of
-      Eq t (SA (i, s)) ->
+    go (Then _ f2) = go f2
+    go (Eq t0 t1) = goEq t0 t1
+      -- scope check: when we apply a substitution, the term and the substitution are in the right scope.
+      --   * all variables in the term must be in the range of the substitution
+      -- occurs check
+    goEq t (SA (i, s)) =
          case inverseSubst $ narrowSubst (freeVars t) s of
            Nothing -> []
            Just s' -> [(i, substitute s' t)]
-      Eq (SA (i, s)) t ->
+    goEq (SA (i, s)) t =
          case inverseSubst $ narrowSubst (freeVars t) s of
            Nothing -> []
            Just s' -> [(i, substitute s' t)]
-      _ -> []
+    goEq _ _ = []
 
 narrowSubst :: Set Int -> Subst Term -> Subst Term
 narrowSubst s (Subst xs) =
@@ -347,8 +341,6 @@ unifyFormula =
     removeConstructors .
     trace "        removeImplications" .
     removeImplications .
-    trace "conjunctionsToImplications" .
-    conjunctionsToImplications .
     trace "                  toPrenex" .
     toPrenex .
     trace "                 skolemize" .
@@ -379,7 +371,7 @@ ppFormula vnames = go
     go (Forall v f) = "∀" ++ (vnames v) ++ ". " ++ go f
     go (Exists v f) = "∃" ++ (vnames v) ++ ". " ++ go f
     go (Conj f1 f2) = "(" ++ go f1 ++ ") ∧ (" ++ go f2 ++ ")"
-    go (Then f1 f2) = go f1 ++ " → " ++ go f2
+    go (Then (t0, t1) f2) = go (Eq t0 t1) ++ " → " ++ go f2
     go (Eq t0 t1) = ppTerm vnames t0 ++ " == " ++ ppTerm vnames t1
 
 ppTerm :: (Int -> String) -> Term -> String
@@ -419,11 +411,11 @@ tf3 =
 
 tf4 :: Formula
 tf4 = Forall 0 $ Forall 1 $
-  Eq (V 0) (L (V 1)) `Then` Exists 2 (Eq (V 0) (L (V 2)))
+  (V 0, L (V 1)) `Then` Exists 2 (Eq (V 0) (L (V 2)))
 
 tf5 :: Formula
 tf5 = Forall 0 $ Forall 1 $
-  Eq (V 0) (L (V 1)) `Then` Forall 1 (Eq (V 1) (V 0) `Then` Exists 2 (Eq (V 1) (L (V 2))))
+  (V 0, L (V 1)) `Then` Forall 1 ((V 1, V 0) `Then` Exists 2 (Eq (V 1) (L (V 2))))
 
 tf6 :: Formula
 tf6 = Forall 0 $ Forall 0 $ Exists 1 (Eq (V 1) (V 0))
