@@ -31,7 +31,7 @@ type SkolemApp = (Int, Subst Term)
 --------------------------------------
 
 newtype Subst t = Subst [(Var,t)]
-  deriving (Show, Functor, Foldable, Traversable)
+  deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
 
 lookupSubst :: Var -> Subst e -> Maybe e
 lookupSubst i (Subst s) = lookup i s
@@ -57,7 +57,7 @@ data Term
   | U
   | L Term
   | P Term Term
-  deriving Show
+  deriving (Eq, Ord, Show)
 
 -- | A language of first order formulas with equality, conjunction, implication
 -- and quantifiers.
@@ -142,8 +142,8 @@ rename scope0 ff0 = evalState (go ff0) Set.empty
 
 -- | Replaces existential variables with skolem functions
 --
--- It also has the side effect of renaming universally quantified variables that
--- are bound more than once.
+-- Every time that `SA (i,s)` occurs, the domain of `s` is exactly the set of
+-- bound variables in scope.
 skolemize :: Formula -> Formula
 skolemize = go Map.empty []
   where
@@ -293,9 +293,15 @@ removeConstructors = go
     goEq (P ta1 ta2) (P tb1 tb2) = goEq ta1 ta2 ++ goEq tb1 tb2
     goEq t0 t1 = [(t0, t1)]
 
--- | Assign terms to skolem functions
+-- | Assign terms to skolem functions.
 --
--- @unify (t == SA (i, s))@ is @[(i, substitute (inverseSubst s) t)@
+-- When @unify@ returns pairs @(i, t) :: (Int, Term)@, @t@'s free variables are
+-- in the scope of @i@ (the domain of the accompanying substitution).
+--
+-- Example:
+--
+-- > unify (t == SA (i, s))@ is @[(i, substitute (inverseSubst s) t)
+--
 unify :: Formula -> [(Int, Term)]
 unify = go
   where
@@ -304,31 +310,58 @@ unify = go
     go (Conj f1 f2) = go f1 ++ go f2
     go (Then _ f2) = go f2
     go (Eq t0 t1) = goEq t0 t1
-      -- scope check: when we apply a substitution, the term and the substitution are in the right scope.
-      --   * all variables in the term must be in the range of the substitution
-      -- occurs check
+      -- Checks to consider:
+      --  * occurs check
+      --  * scope check: the free variables of t are in the range of the substitution
     goEq t (SA (i, s)) =
-         case inverseSubst $ narrowSubst (freeVars t) s of
+         case inverseSubst $ narrowForInvertibility s of
            Nothing -> []
            Just s' -> [(i, substitute s' t)]
     goEq (SA (i, s)) t =
-         case inverseSubst $ narrowSubst (freeVars t) s of
+         case inverseSubst $ narrowForInvertibility s of
            Nothing -> []
            Just s' -> [(i, substitute s' t)]
     goEq _ _ = []
 
-narrowSubst :: Set Int -> Subst Term -> Subst Term
-narrowSubst s (Subst xs) =
-  Subst [(i, t) | (i, t) <- xs, Set.member i s]
+-- TODO: consider what to do when unification introduces equalities of
+-- constructors that might need to be eliminated
 
+-- | @narrowForInvertibility s@ removes variables from @s@ if the range
+-- is not a variable.
+narrowForInvertibility :: Subst Term -> Subst Term
+narrowForInvertibility (Subst xs) = Subst [(i, V j) | (i, V j) <- xs]
+
+-- | @narrowInvertedSubst t s@ removes variables from the inversion of @s@
+-- if the range doesn't match any subterm of @t@.
+narrowInvertedSubst :: Term -> Subst Term -> Subst Term
+narrowInvertedSubst t (Subst xs) =
+  Subst [(i, t) | (i, t) <- xs, Set.member t s]
+  where
+    s = subTerms t
+
+subTerms :: Term -> Set Term
+subTerms t = Set.insert t (properSubTerms t)
+  where
+    properSubTerms :: Term -> Set Term
+    properSubTerms (V _) = Set.empty
+    properSubTerms (SA (_, s)) = subTermsSubst s
+    properSubTerms U = Set.empty
+    properSubTerms (L t1) = subTerms t1
+    properSubTerms (P t1 t2) = Set.union (subTerms t1) (subTerms t2)
+
+    subTermsSubst :: Subst Term -> Set Term
+    subTermsSubst (Subst xs) = Set.unions $ map (subTerms . snd) xs
+
+-- TODO: consider what to do with non-invertible substitutions like ?v[x\z,y\z] ?= z
+--
+-- At the moment we just pick the first of the variables with a duplicated
+-- range.
 inverseSubst :: Subst Term -> Maybe (Subst Term)
 inverseSubst (Subst xs) = Subst <$> go xs
   where
     go [] = Just []
-    go ((i, t) : xs) =
-      case t of
-        V j -> ((j, V i) :) <$> go xs
-        _ -> Nothing
+    go ((i, V j) : xs) = ((j, V i) :) <$> go xs
+    go _ = Nothing
 
 --- | Assign terms to existential variables in an attempt to make a formula
 -- true.
