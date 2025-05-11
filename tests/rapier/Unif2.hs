@@ -314,11 +314,13 @@ unify = go
       -- Checks to consider:
       --  * occurs check
       --  * scope check: the free variables of t are in the range of the substitution
-    goEq t (SA (i, s)) =
+    goEq t (SA (i, s))
+      | Set.isSubsetOf (freeVars t) (freeVarsSubst (narrowForInvertibility s)) =
          case inverseSubst $ narrowForInvertibility s of
            Nothing -> []
            Just s' -> [(i, substitute s' t)]
-    goEq (SA (i, s)) t =
+    goEq (SA (i, s)) t
+      | Set.isSubsetOf (freeVars t) (freeVarsSubst (narrowForInvertibility s)) =
          case inverseSubst $ narrowForInvertibility s of
            Nothing -> []
            Just s' -> [(i, substitute s' t)]
@@ -453,3 +455,6 @@ tf5 = Forall 0 $ Forall 1 $
 
 tf6 :: Formula
 tf6 = Forall 0 $ Forall 0 $ Exists 1 (Eq (V 1) (V 0))
+
+tf7 :: Formula
+tf7 = Forall 0 $ Exists 1 $ Exists 2 $ (V 0, V 1) `Then` Eq (V 0) (V 2)
