@@ -151,6 +151,7 @@ skolemize = go Map.empty []
     -- it with
     --
     -- uvs are the universally quantified variables in scope
+    go :: Map Var Term -> [Var] -> Formula -> Formula
     go eenv uvs f0 = case f0 of
       Forall v f ->
         Forall v $ go eenv (v : uvs) f
