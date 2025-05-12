@@ -265,6 +265,8 @@ removeImplications = go
     go (Conj f1 f2) = Conj (go f1) (go f2)
     go (Then eq1 f2) =
       case eq1 of
+        (SA{}, _) -> Then eq1 $ go f2
+        (_, SA{}) -> Then eq1 $ go f2
         -- The scope of the substitution is empty since we don't expect
         -- quantifiers in f or f2. This is a hack, but a hack that acomplishes
         -- the same as computing the appropriate scope.
@@ -273,8 +275,6 @@ removeImplications = go
         (U, U) -> go f2
         (L t1, L t2) -> go $ Then (t1, t2) f2
         (P ta1 ta2, P tb1 tb2) -> go $ Then (ta1, tb1) $ Then (ta2, tb2) f2
-        (SA{}, _) -> Then eq1 $ go f2
-        (_, SA{}) -> Then eq1 $ go f2
         _ -> Eq U U
     go f@(Eq {}) = f
 
@@ -495,6 +495,22 @@ tf8 = Forall 0 $ Forall 1 $ Forall 2 $
     )
   )
 
+-- | forall a b c d. exists t_f x_f. a = (b, c) -> a = (d -> d, d) -> t_f = b -> x_f = c -> exists l r. t_f = l -> r /\ l = x_f /\ x_f = d -> r = c
+tf9 :: Formula
+tf9 = Forall 0 $ Forall 1 $ Forall 2 $ Forall 7 $
+  Exists 3 (Exists 4 $
+    (V 0, P (V 1) (V 2))
+      `Then` (V 0, P (P (V 7) (V 7)) (V 7))
+      `Then` (V 3, V 1)
+      `Then` (V 4, V 2)
+      `Then`
+    Exists 5 (Exists 6 $
+             Eq (V 3) (P (V 5) (V 6))
+      `Conj` Eq (V 5) (V 4)
+      `Conj` ((V 4, V 7) `Then` Eq (V 6) (V 2))
+    )
+  )
+
 test :: IO ()
 test = do
   let tests =
@@ -507,6 +523,7 @@ test = do
         , ("tf6", (tf6, [(2,V 1)]))
         , ("tf7", (tf7, [(1,SA (2,Subst [(0,SA (1,Subst [(0,V 0)]))]))]))
         , ("tf8", (tf8, [(3,P U U),(4,U),(5,U),(6,U)]))
+        , ("tf9", (tf9, [(3,P (V 7) (V 7)),(4, V 7),(5, V 7),(6, V 7)]))
         ]
   mapM_ runUnificationTest tests
   where
