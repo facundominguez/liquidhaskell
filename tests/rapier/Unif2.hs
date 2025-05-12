@@ -375,7 +375,13 @@ inverseSubst (Subst xs) = Subst <$> go xs
 --- | Assign terms to existential variables in an attempt to make a formula
 -- true.
 unifyFormula :: Formula -> [(Int, Term)]
-unifyFormula =
+unifyFormula = unifyFormula' False
+
+unifyFormulaTrace :: Formula -> [(Int, Term)]
+unifyFormulaTrace = unifyFormula' True
+
+unifyFormula' :: Bool -> Formula -> [(Int, Term)]
+unifyFormula' mustTrace =
     traceUnify
           "                     unify" .
     unify .
@@ -392,9 +398,13 @@ unifyFormula =
     trace "                   initial"
   where
     trace :: String -> Formula -> Formula
-    trace label f = Debug.Trace.trace (label ++ ": " ++ ppFormula prettyName f) f
+    trace label f
+      | mustTrace = Debug.Trace.trace (label ++ ": " ++ ppFormula prettyName f) f
+      | otherwise = f
     traceUnify :: String -> [(Int, Term)] -> [(Int, Term)]
-    traceUnify label xs = Debug.Trace.trace (label ++ ": " ++ showUnification xs) xs
+    traceUnify label xs
+      | mustTrace = Debug.Trace.trace (label ++ ": " ++ showUnification xs) xs
+      | otherwise = xs
     showUnification :: [(Int, Term)] -> String
     showUnification xs =
       let xs' = map (\(i, t) -> (prettyName i, ppTerm prettyName t)) xs
@@ -483,3 +493,25 @@ tf8 = Forall 0 $ Forall 1 $ Forall 2 $
       `Conj` ((V 4, U) `Then` Eq (V 6) (V 2))
     )
   )
+
+test :: IO ()
+test = do
+  let tests =
+        [ ("tf0", (tf0, [(1,V 0)]))
+        , ("tf1", (tf1, [(1,V 0), (3,V 2)]))
+        , ("tf2", (tf2, [(1,V 0), (3,V 2)]))
+        , ("tf3", (tf3, [(0,V 1), (3,V 2)]))
+        , ("tf4", (tf4, [(2,V 1)]))
+        , ("tf5", (tf5, [(3,V 1)]))
+        , ("tf6", (tf6, [(2,V 1)]))
+        , ("tf7", (tf7, [(1,SA (2,Subst [(0,SA (1,Subst [(0,V 0)]))]))]))
+        , ("tf8", (tf8, [(3,P U U),(4,U),(5,U),(6,U)]))
+        ]
+  mapM_ runUnificationTest tests
+  where
+    runUnificationTest (name, (f, expected)) = do
+      let result = unifyFormula f
+      if result == expected
+        then putStrLn $ concat ["Test ", name, ": Passed"]
+        else putStrLn $
+               concat ["Test ", name, ": Failed\n", show expected, " but got ", show result, "\n"]
