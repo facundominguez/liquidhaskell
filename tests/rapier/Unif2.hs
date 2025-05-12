@@ -268,7 +268,7 @@ removeImplications = go
         (t, V v) -> go $ substituteFormula mempty (fromListSubst [(v, t)]) f2
         (U, U) -> go f2
         (L t1, L t2) -> go $ Then (t1, t2) f2
-        (P ta1 ta2, P tb1 tb2) -> go $ Then (ta1, ta2) $ Then (tb1, tb2) f2
+        (P ta1 ta2, P tb1 tb2) -> go $ Then (ta1, tb1) $ Then (ta2, tb2) f2
         (SA{}, _) -> Then eq1 $ go f2
         (_, SA{}) -> Then eq1 $ go f2
         _ -> Eq U U
