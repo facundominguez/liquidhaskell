@@ -309,7 +309,7 @@ unify = go
     go (Forall v f) = go f
     go (Exists v f) = go f
     go (Conj f1 f2) = go f1 ++ go f2
-    go (Then _ f2) = go f2
+    go (Then (t0, t1) f2) = goEq t0 t1 ++ go f2
     go (Eq t0 t1) = goEq t0 t1
       -- Checks to consider:
       --  * occurs check
