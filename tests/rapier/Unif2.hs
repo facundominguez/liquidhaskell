@@ -315,13 +315,13 @@ unify = go
       --  * occurs check
       --  * scope check: the free variables of t are in the range of the substitution
     goEq t (SA (i, s))
-      | Set.isSubsetOf (freeVars t) (freeVarsSubst (narrowForInvertibility s)) =
-         case inverseSubst $ narrowForInvertibility s of
+      | Set.isSubsetOf (freeVars t) (freeVarsSubst (narrowForInvertibility (freeVars t) s)) =
+         case inverseSubst $ narrowForInvertibility (freeVars t) s of
            Nothing -> []
            Just s' -> [(i, substitute s' t)]
     goEq (SA (i, s)) t
-      | Set.isSubsetOf (freeVars t) (freeVarsSubst (narrowForInvertibility s)) =
-         case inverseSubst $ narrowForInvertibility s of
+      | Set.isSubsetOf (freeVars t) (freeVarsSubst (narrowForInvertibility (freeVars t) s)) =
+         case inverseSubst $ narrowForInvertibility (freeVars t) s of
            Nothing -> []
            Just s' -> [(i, substitute s' t)]
     goEq _ _ = []
@@ -329,10 +329,10 @@ unify = go
 -- TODO: consider what to do when unification introduces equalities of
 -- constructors that might need to be eliminated
 
--- | @narrowForInvertibility s@ removes variables from @s@ if the range
--- is not a variable.
-narrowForInvertibility :: Subst Term -> Subst Term
-narrowForInvertibility (Subst xs) = Subst [(i, V j) | (i, V j) <- xs]
+-- | @narrowForInvertibility vs s@ removes pairs from @s@ if the range
+-- is not a variable, or if the range is not a member of @vs@.
+narrowForInvertibility :: Set Var -> Subst Term -> Subst Term
+narrowForInvertibility vs (Subst xs) = Subst [(i, V j) | (i, V j) <- xs, Set.member j vs]
 
 -- | @narrowInvertedSubst t s@ removes variables from the inversion of @s@
 -- if the range doesn't match any subterm of @t@.
