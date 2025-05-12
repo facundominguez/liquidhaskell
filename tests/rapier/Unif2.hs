@@ -414,7 +414,8 @@ unifyFormula' mustTrace =
 
 -- | Pretty print a variable name
 prettyName :: Int -> String
-prettyName = ((["x", "y", "z", "u", "v", "w"] ++ [ "v" ++ show i | i <- [1..] ]) !!)
+prettyName = ((["x", "y", "z", "u", "v", "w", "r", "s", "t"] ++ [ "v" ++ show i | i <- [1..] ]) !!)
+-- prettyName = ((["a", "b", "c", "t_f", "x_f", "l", "r" ] ++ ["x", "y", "z", "u", "v", "w", "r", "s", "t"] ++ [ "v" ++ show i | i <- [1..] ]) !!)
 
 -- | Pretty print a formula
 ppFormula :: (Int -> String) -> Formula -> String
