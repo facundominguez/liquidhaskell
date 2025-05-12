@@ -184,7 +184,11 @@ substitute s t = case t of
     V v -> case lookupSubst v s of
       Nothing -> V v
       Just t1 -> t1
-    SA (v, s1) -> SA (v, composeSubst s1 s)
+    -- We allow substituting skolem applications, thus overloading
+    -- the meaning of substitution. We might move this to a separate function.
+    SA (v, s1) -> case lookupSubst v s of
+      Just t1 -> substitute s1 t1
+      Nothing -> SA (v, composeSubst s1 s)
     U -> U
     L t1 -> L (substitute s t1)
     P t1 t2 -> P (substitute s t1) (substitute s t2)
@@ -309,7 +313,9 @@ unify = go
     go (Forall v f) = go f
     go (Exists v f) = go f
     go (Conj f1 f2) = go f1 ++ go f2
-    go (Then (t0, t1) f2) = goEq t0 t1 ++ go f2
+    go (Then (t0, t1) f2) =
+      let unifsT1 = goEq t0 t1
+       in unifsT1 ++ go (substituteFormula Set.empty (fromListSubst unifsT1) f2)
     go (Eq t0 t1) = goEq t0 t1
       -- Checks to consider:
       --  * occurs check
