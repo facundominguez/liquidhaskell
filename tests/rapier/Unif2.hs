@@ -458,3 +458,22 @@ tf6 = Forall 0 $ Forall 0 $ Exists 1 (Eq (V 1) (V 0))
 
 tf7 :: Formula
 tf7 = Forall 0 $ Exists 1 $ Exists 2 $ (V 0, V 1) `Then` Eq (V 0) (V 2)
+
+infixr 7 `Then`
+infixr 8 `Conj`
+
+-- | forall a b c. exists t_f x_f. a = (b, c) -> a = (Int -> Int, Int) -> t_f = b -> x_f = c -> exists l r. t_f = l -> r /\ l = x_f /\ x_f = Int -> r = c
+tf8 :: Formula
+tf8 = Forall 0 $ Forall 1 $ Forall 2 $
+  Exists 3 (Exists 4 $
+    (V 0, P (V 1) (V 2))
+      `Then` (V 0, P (P U U) U)
+      `Then` (V 3, V 1)
+      `Then` (V 4, V 2)
+      `Then`
+    Exists 5 (Exists 6 $
+             Eq (V 3) (P (V 5) (V 6))
+      `Conj` Eq (V 5) (V 4)
+      `Conj` ((V 4, U) `Then` Eq (V 6) (V 2))
+    )
+  )
