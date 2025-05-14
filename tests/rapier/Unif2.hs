@@ -1,5 +1,7 @@
 {-# LANGUAGE GHC2024 #-}
 
+{-@ LIQUID "--exactdc" @-}
+
 -- | In progress
 module Unif2 where
 
@@ -80,8 +82,11 @@ freeVars = \case
     L t -> freeVars t
     P t0 t1 -> Set.union (freeVars t0) (freeVars t1)
 
+{-@ opaque-reflect freeVarsSubst @-}
+
+{-@ ignore freeVarsSubst @-}
 freeVarsSubst :: Subst Term -> Set Int
-freeVarsSubst (Subst s) = foldMap (freeVars . snd) s
+freeVarsSubst (Subst s) = Set.unions $ map (freeVars . snd) s
 
 {-@ assume freshVar :: s:Set Int -> {v:Int | not (member v s)} @-}
 freshVar :: Set Int -> Int
@@ -105,6 +110,7 @@ type ScopedTerm S = {t:Term | isSubsetOf (freeVars t) S}
 -- | Rename universal and existential variables when they are bound more than
 -- once.
 --
+{-@ ignore rename @-}
 rename
   :: Set Int -- the set of variables that can appear free in the input formula
   -> Formula
@@ -144,6 +150,7 @@ rename scope0 ff0 = evalState (go ff0) Set.empty
 --
 -- Every time that `SA (i,s)` occurs, the domain of `s` is exactly the set of
 -- bound variables in scope.
+{-@ ignore skolemize @-}
 skolemize :: Formula -> Formula
 skolemize = go Map.empty []
   where
@@ -179,6 +186,7 @@ mkSkolemApp v uvs = SA (v, idSubst uvs)
     idSubst :: [Var] -> Subst Term
     idSubst vs = fromListSubst [(v, V v) | v <- vs]
 
+{-@ ignore substitute @-}
 substitute :: Subst Term -> Term -> Term
 substitute s t = case t of
     V v -> case lookupSubst v s of
@@ -196,6 +204,7 @@ substitute s t = case t of
     composeSubst :: Subst Term -> Subst Term -> Subst Term
     composeSubst (Subst xs) s = Subst (map (fmap (substitute s)) xs)
 
+{-@ ignore substituteFormula @-}
 substituteFormula :: Set Int -> Subst Term -> Formula -> Formula
 substituteFormula scope s = \case
     Forall v f
@@ -237,6 +246,7 @@ substituteFormula scope s = \case
 
 -- | @toPrenex f@ transforms a formula into prenex normal form by moving all
 -- the universal quantifiers to the front.
+{-@ ignore toPrenex @-}
 toPrenex :: Formula -> Formula
 toPrenex f0 =
     let (vs, f') = go f0
@@ -257,6 +267,7 @@ toPrenex f0 =
 -- | Removes implications from the formula by substituting in the consequent
 --
 -- @x == t -> f@ becomes @f[x:=t]@
+{-@ ignore removeImplications @-}
 removeImplications :: Formula -> Formula
 removeImplications = go
   where
@@ -281,6 +292,7 @@ removeImplications = go
 -- | Removes constructors from equalities
 --
 -- @P a b == P c d -> e@ becomes @a == c -> b == d -> e@
+{-@ ignore removeConstructors @-}
 removeConstructors :: Formula -> Formula
 removeConstructors = go
   where
@@ -307,6 +319,8 @@ removeConstructors = go
 --
 -- > unify (t == SA (i, s))@ is @[(i, substitute (inverseSubst s) t)
 --
+{-@ lazy unify @-}
+{-@ assume unify :: f:Formula -> [(i :: Int, {vt:Term | isSubsetOfMaybe (freeVars vt) (lookup i (scopes f)) })] @-}
 unify :: Formula -> [(Int, Term)]
 unify = go
   where
@@ -332,6 +346,47 @@ unify = go
            Just s' -> [(i, substitute s' t)]
     goEq _ _ = []
 
+{-@ measure scopes @-}
+scopes :: Formula -> [(Int, Set Int)]
+scopes (Forall _ f) = scopes f
+scopes (Exists _ f) = scopes f
+scopes (Conj f1 f2) = scopes f1 ++ scopes f2
+scopes (Then (t0, t1) f2) = scopesTerm t0 ++ scopesTerm t1 ++ scopes f2
+scopes (Eq t0 t1) = scopesTerm t0 ++ scopesTerm t1
+
+{-@ measure scopesTerm @-}
+scopesTerm :: Term -> [(Int, Set Int)]
+scopesTerm (V i) = []
+scopesTerm (SA (i, s)) = [(i, domainSubst s)]
+scopesTerm U = []
+scopesTerm (L t) = scopesTerm t
+scopesTerm (P t0 t1) = scopesTerm t0 ++ scopesTerm t1
+
+{-@ opaque-reflect domainSubst @-}
+{-@ ignore domainSubst @-}
+domainSubst :: Subst e -> Set Int
+domainSubst (Subst xs) = Set.fromList $ map fst xs
+
+{-@ assume reflect ++ as append @-}
+
+{-@ reflect append @-}
+append :: [a] -> [a] -> [a]
+append [] ys = ys
+append (x:xs) ys = x : append xs ys
+
+{-@ assume reflect lookup as lookupR @-}
+{-@ reflect lookupR @-}
+lookupR :: Eq a => a -> [(a, b)] -> Maybe b
+lookupR _ [] = Nothing
+lookupR x ((y, v) : ys)
+  | x == y = Just v
+  | otherwise = lookupR x ys
+
+{-@ reflect isSubsetOfMaybe @-}
+isSubsetOfMaybe :: Ord a => Set a -> Maybe (Set a) -> Bool
+isSubsetOfMaybe xs (Just ys) = Set.isSubsetOf xs ys
+isSubsetOfMaybe xs Nothing = False
+
 -- TODO: consider what to do when unification introduces equalities of
 -- constructors that might need to be eliminated
 
@@ -348,6 +403,7 @@ narrowInvertedSubst t (Subst xs) =
   where
     s = subTerms t
 
+{-@ ignore subTerms @-}
 subTerms :: Term -> Set Term
 subTerms t = Set.insert t (properSubTerms t)
   where
@@ -365,6 +421,7 @@ subTerms t = Set.insert t (properSubTerms t)
 --
 -- At the moment we just pick the first of the variables with a duplicated
 -- range.
+{-@ ignore inverseSubst @-}
 inverseSubst :: Subst Term -> Maybe (Subst Term)
 inverseSubst (Subst xs) = Subst <$> go xs
   where
@@ -374,12 +431,15 @@ inverseSubst (Subst xs) = Subst <$> go xs
 
 --- | Assign terms to existential variables in an attempt to make a formula
 -- true.
+{-@ ignore unifyFormula @-}
 unifyFormula :: Formula -> [(Int, Term)]
 unifyFormula = unifyFormula' False
 
+{-@ ignore unifyFormulaTrace @-}
 unifyFormulaTrace :: Formula -> [(Int, Term)]
 unifyFormulaTrace = unifyFormula' True
 
+{-@ ignore unifyFormula' @-}
 unifyFormula' :: Bool -> Formula -> [(Int, Term)]
 unifyFormula' mustTrace =
     traceUnify
@@ -413,11 +473,13 @@ unifyFormula' mustTrace =
 -- pretty printing
 
 -- | Pretty print a variable name
+{-@ ignore prettyName @-}
 prettyName :: Int -> String
 prettyName = ((["x", "y", "z", "u", "v", "w", "r", "s", "t"] ++ [ "v" ++ show i | i <- [1..] ]) !!)
 -- prettyName = ((["a", "b", "c", "t_f", "x_f", "l", "r" ] ++ ["x", "y", "z", "u", "v", "w", "r", "s", "t"] ++ [ "v" ++ show i | i <- [1..] ]) !!)
 
 -- | Pretty print a formula
+{-@ ignore ppFormula @-}
 ppFormula :: (Int -> String) -> Formula -> String
 ppFormula vnames = go
   where
@@ -427,6 +489,7 @@ ppFormula vnames = go
     go (Then (t0, t1) f2) = go (Eq t0 t1) ++ " → " ++ go f2
     go (Eq t0 t1) = ppTerm vnames t0 ++ " == " ++ ppTerm vnames t1
 
+{-@ ignore ppTerm @-}
 ppTerm :: (Int -> String) -> Term -> String
 ppTerm vnames t =
   case t of
@@ -436,6 +499,7 @@ ppTerm vnames t =
     L t1 -> "L(" ++ ppTerm vnames t1 ++ ")"
     P t1 t2 -> "P(" ++ ppTerm vnames t1 ++ ", " ++ ppTerm vnames t2 ++ ")"
 
+{-@ ignore ppSubst @-}
 ppSubst :: (Int -> String) -> Subst Term -> String
 ppSubst vnames (Subst xs) =
   "[" ++ List.intercalate ", " (map (\(i, t) -> vnames i ++ ":=" ++ ppTerm vnames t) xs) ++ "]"
@@ -495,6 +559,7 @@ tf8 = Forall 0 $ Forall 1 $ Forall 2 $
     )
   )
 
+{-@ ignore test @-}
 test :: IO ()
 test = do
   let tests =
