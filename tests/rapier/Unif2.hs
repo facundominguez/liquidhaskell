@@ -1,5 +1,6 @@
 {-# LANGUAGE GHC2024 #-}
 
+{-@ LIQUID "--ple" @-}
 {-@ LIQUID "--exactdc" @-}
 
 -- | In progress
@@ -14,6 +15,9 @@ import Data.Map qualified as Map
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Debug.Trace qualified
+import Language.Haskell.Liquid.ProofCombinators
+
+{-@ infixr ++ @-}
 
 -- | We have plain variables
 type Var = Int
@@ -97,6 +101,16 @@ freshVar s = case Set.lookupMax s of
 {-@
 type ScopedTerm S = {t:Term | isSubsetOf (freeVars t) S}
 @-}
+
+-- | The size of a formula is the number of its subformulas.
+{-@ measure formulaSize @-}
+{-@ formulaSize :: Formula -> Nat @-}
+formulaSize :: Formula -> Int
+formulaSize (Forall _ f) = 1 + formulaSize f
+formulaSize (Exists _ f) = 1 + formulaSize f
+formulaSize (Conj f1 f2) = 1 + formulaSize f1 + formulaSize f2
+formulaSize (Then _ f2) = 1 + formulaSize f2
+formulaSize (Eq t0 t1) = 1
 
 
 ------------------
@@ -192,11 +206,7 @@ substitute s t = case t of
     V v -> case lookupSubst v s of
       Nothing -> V v
       Just t1 -> t1
-    -- We allow substituting skolem applications, thus overloading
-    -- the meaning of substitution. We might move this to a separate function.
-    SA (v, s1) -> case lookupSubst v s of
-      Just t1 -> substitute s1 t1
-      Nothing -> SA (v, composeSubst s1 s)
+    SA (v, s1) -> SA (v, composeSubst s1 s)
     U -> U
     L t1 -> L (substitute s t1)
     P t1 t2 -> P (substitute s t1) (substitute s t2)
@@ -204,7 +214,13 @@ substitute s t = case t of
     composeSubst :: Subst Term -> Subst Term -> Subst Term
     composeSubst (Subst xs) s = Subst (map (fmap (substitute s)) xs)
 
-{-@ ignore substituteFormula @-}
+{-@
+substituteFormula
+  :: Set Int
+  -> Subst Term
+  -> f:Formula
+  -> {v:Formula | formulaSize f == formulaSize v}
+@-}
 substituteFormula :: Set Int -> Subst Term -> Formula -> Formula
 substituteFormula scope s = \case
     Forall v f
@@ -243,6 +259,91 @@ substituteFormula scope s = \case
     Then (t0, t1) f2 ->
       Then (substitute s t0, substitute s t1) (substituteFormula scope s f2)
     Eq t0 t1 -> Eq (substitute s t0) (substitute s t1)
+
+
+{-@
+lazy substituteSkolemsTerm
+assume substituteSkolemsTerm
+  :: Subst Term
+  -> t:Term
+  -> {v:Term |
+       isSubsetOf (Set.listElts (scopesTerm v)) (Set.listElts (scopesTerm t))
+     }
+@-}
+substituteSkolemsTerm :: Subst Term -> Term -> Term
+substituteSkolemsTerm s t = case t of
+    V v -> V v
+    SA (v, s1) -> case lookupSubst v s of
+      Just t1 -> substituteSkolemsTerm s1 t1
+      Nothing -> SA (v, composeSubst s1 s)
+    U -> U
+    L t1 -> L (substituteSkolemsTerm s t1)
+    P t1 t2 -> P (substituteSkolemsTerm s t1) (substituteSkolemsTerm s t2)
+  where
+    {-@ ignore composeSubst @-}
+    composeSubst :: Subst Term -> Subst Term -> Subst Term
+    composeSubst (Subst xs) s = Subst (map (fmap (substituteSkolemsTerm s)) xs)
+
+
+{-@ opaque-reflect scopesSubst @-}
+scopesSubst :: Subst Term -> [(Int, Set Int)]
+scopesSubst (Subst xs) = concatMap (scopesTerm . snd) xs
+
+
+-- LH can show that substituteSkolems preserves formulaSize, but we need reacher
+-- specifications for auxiliary functions if we want to verify the relationship
+-- between scopes.
+{-@
+assume substituteSkolems
+  :: s:Subst Term
+  -> f:Formula
+  -> {v:Formula |
+       formulaSize f == formulaSize v &&
+       Set.isSubsetOf (Set.listElts (scopes v)) (Set.union (Set.listElts (scopesSubst s)) (Set.listElts (scopes f)))
+     }
+@-}
+substituteSkolems :: Subst Term -> Formula -> Formula
+substituteSkolems s = \case
+    Forall v f ->
+        let -- This has the effect of canceling the substitution of v
+            -- whatever it was in s
+            s' = extendSubst s v (V v)
+            f' = substituteSkolems s' f
+         in
+            Forall v f'
+    Exists v f ->
+        let -- This has the effect of canceling the substitution of v
+            -- whatever it was in s
+            s' = extendSubst s v (V v)
+            f' = substituteSkolems s' f
+         in
+            Exists v f'
+    Conj f1 f2 -> Conj (substituteSkolems s f1) (substituteSkolems s f2)
+    Then (t0, t1) f2 ->
+      Then (substituteSkolemsTerm s t0, substituteSkolemsTerm s t1) (substituteSkolems s f2)
+    Eq t0 t1 -> Eq (substituteSkolemsTerm s t0) (substituteSkolemsTerm s t1)
+
+{-@
+assume lemmaScopesSubst
+  :: s:[(Int, Set Int)]
+// Bug: liquid haskell is generating an incorrect subtyping constraint when using this lemma
+//  -> ss:Subst {t:Term | isSubsetOf (Set.listElts (scopesTerm t)) (Set.listElts s)}
+  -> ss:Subst Term
+  -> { Set.isSubsetOf (Set.listElts (scopesSubst ss)) (Set.listElts s) }
+@-}
+lemmaScopesSubst :: [(Int, Set Int)] -> Subst Term -> ()
+lemmaScopesSubst _ _ = ()
+
+-- TODO: add as hypothesis that the scopes of f1 match those of f2 for the same existentials.
+{-@
+assume lemmaScopesAppend
+  :: f1:Formula
+  -> f2:Formula
+  -> { Set.listElts (scopes f1 ++ scopes f2) = Set.union (Set.listElts (scopes f1)) (Set.listElts (scopes f2)) }
+@-}
+lemmaScopesAppend :: Formula -> Formula -> ()
+lemmaScopesAppend _ _ = ()
+
 
 -- | @toPrenex f@ transforms a formula into prenex normal form by moving all
 -- the universal quantifiers to the front.
@@ -319,33 +420,139 @@ removeConstructors = go
 --
 -- > unify (t == SA (i, s))@ is @[(i, substitute (inverseSubst s) t)
 --
-{-@ lazy unify @-}
-{-@ assume unify :: f:Formula -> [(i :: Int, {vt:Term | isSubsetOfMaybe (freeVars vt) (lookup i (scopes f)) })] @-}
+{-@ unify :: f:Formula -> [(i :: Int, {vt:Term | isSubsetOfJust (freeVars vt) (lookup i (scopes f)) })] @-}
 unify :: Formula -> [(Int, Term)]
 unify = go
   where
+    {-@
+        go
+          :: f:Formula
+          -> [( i :: Int
+              , {vt:Term |
+                   isSubsetOfJust (freeVars vt) (lookup i (scopes f))
+                   && isSubsetOf (Set.listElts (scopesTerm vt)) (Set.listElts (scopes f))
+                }
+              )] / [formulaSize f]
+      @-}
+    go :: Formula -> [(Int, Term)]
     go (Forall v f) = go f
     go (Exists v f) = go f
-    go (Conj f1 f2) = go f1 ++ go f2
+    go (Conj f1 f2) =
+      lemmaLookupConjLeft f1 f2 (go f1) ++ lemmaLookupConjRight f1 f2 (go f2)
     go (Then (t0, t1) f2) =
       let unifsT1 = goEq t0 t1
-       in unifsT1 ++ go (substituteFormula Set.empty (fromListSubst unifsT1) f2)
+       in unifsT1 ++ go (substituteSkolems (fromListSubst unifsT1) f2)
+            ? lemmaScopesSubst (scopesTerm t0 ++ scopesTerm t1) (fromListSubst unifsT1)
     go (Eq t0 t1) = goEq t0 t1
-      -- Checks to consider:
-      --  * occurs check
-      --  * scope check: the free variables of t are in the range of the substitution
-    goEq t (SA (i, s))
-      | Set.isSubsetOf (freeVars t) (freeVarsSubst (narrowForInvertibility (freeVars t) s)) =
-         case inverseSubst $ narrowForInvertibility (freeVars t) s of
-           Nothing -> []
-           Just s' -> [(i, substitute s' t)]
-    goEq (SA (i, s)) t
-      | Set.isSubsetOf (freeVars t) (freeVarsSubst (narrowForInvertibility (freeVars t) s)) =
-         case inverseSubst $ narrowForInvertibility (freeVars t) s of
-           Nothing -> []
-           Just s' -> [(i, substitute s' t)]
-    goEq _ _ = []
 
+{-@ lazy goEq @-}
+{-@
+assume goEq
+  :: t0:Term
+  -> t1:Term
+  -> [( i :: Int
+      , {vt:Term |
+           isSubsetOfJust (freeVars vt) (lookup i (scopesTerm t0 ++ scopesTerm t1))
+           && isSubsetOf (Set.listElts (scopesTerm vt)) (Set.listElts (scopesTerm t0 ++ scopesTerm t1))
+        }
+      )]
+@-}
+goEq :: Term -> Term -> [(Int, Term)]
+-- Missing: occurs check
+goEq t (SA (i, s))
+      | Just s' <- inverseSubst $ narrowForInvertibility (freeVars t) s
+      , let t' = substitute s' t
+        -- Scope check
+      , Set.isSubsetOf (freeVars t') (domainSubst s)
+          -- For the first conjunct:
+          --   prove that @Just s@ is @lookup i (scopesTerm t1)@
+          --   use lemmaScopesAppend
+          --
+          -- For the second conjunct:
+          --   prove that @scopesTerm of t'@ is @scopesTerm t0@
+      =
+        [(i, t')]
+goEq (SA (i, s)) t
+      | Just s' <- inverseSubst $ narrowForInvertibility (freeVars t) s
+      , let t' = substitute s' t
+      , Set.isSubsetOf (freeVars t') (domainSubst s)
+      =
+        [(i, t')]
+goEq _ _ = []
+
+
+{-@
+assume lemmaFromListSubst
+  :: s:[(Int, Set Int)]
+  -> [( Int
+      , {vt:Term |
+          isSubsetOf (Set.listElts (scopesTerm vt)) (Set.listElts s)
+        }
+      )]
+  -> Subst
+      ({vt:Term |
+             isSubsetOf (Set.listElts (scopesTerm vt)) (Set.listElts s)
+        })
+@-}
+lemmaFromListSubst :: [(Int, Set Int)] -> [(Int, Term)] -> Subst Term
+lemmaFromListSubst s xs = Subst xs
+
+{-@
+ignore lemmaLookupConjLeft
+assume lemmaLookupConjLeft
+  :: f0:Formula
+  -> f1:Formula
+  -> [( i :: Int
+      , {vt:Term |
+             isSubsetOfJust (freeVars vt) (lookup i (scopes f0))
+          && isSubsetOf (Set.listElts (scopesTerm vt)) (Set.listElts (scopes f0))
+        }
+      )]
+  -> [( i :: Int
+      , {vt:Term |
+             isSubsetOfJust (freeVars vt) (lookup i (scopes f0 ++ scopes f1))
+          && isSubsetOf (Set.listElts (scopesTerm vt)) (Set.listElts (scopes f0 ++ scopes f1))
+        })]
+@-}
+lemmaLookupConjLeft :: Formula -> Formula -> [(Int, Term)] -> [(Int, Term)]
+lemmaLookupConjLeft f0 f1 [] = []
+lemmaLookupConjLeft f0 f1 ((i, t) : xs) =
+    (i, t ? lemmaLookupAppend i (scopes f0) (scopes f1)) : lemmaLookupConjLeft f0 f1 xs
+
+-- TODO: add as hypothesis that the scopes of f0 match those of f1 for the same existentials.
+{-@
+ignore lemmaLookupConjRight
+assume lemmaLookupConjRight
+  :: f0:Formula
+  -> f1:Formula
+  -> [( i :: Int
+      , {vt:Term |
+             isSubsetOfJust (freeVars vt) (lookup i (scopes f1))
+          && isSubsetOf (Set.listElts (scopesTerm vt)) (Set.listElts (scopes f1))
+        })]
+  -> [(i :: Int
+      , {vt:Term |
+             isSubsetOfJust (freeVars vt) (lookup i (scopes f0 ++ scopes f1))
+          && isSubsetOf (Set.listElts (scopesTerm vt)) (Set.listElts (scopes f0 ++ scopes f1))
+        })]
+@-}
+lemmaLookupConjRight :: Formula -> Formula -> [(Int, Term)] -> [(Int, Term)]
+lemmaLookupConjRight f0 f1 [] = []
+lemmaLookupConjRight f0 f1 ((i, t) : xs) =
+    (i, t ? lemmaLookupAppend i (scopes f0) (scopes f1)) : lemmaLookupConjRight f0 f1 xs
+
+{-@
+assume lemmaLookupAppend
+  :: i:Int
+  -> xs:[(Int, a)]
+  -> ys:[(Int, a)]
+  -> { lookup i xs == lookup i (xs ++ ys) || lookup i ys == lookup i (xs ++ ys) }
+@-}
+lemmaLookupAppend :: Int -> [(Int, a)] -> [(Int, a)] -> ()
+lemmaLookupAppend _ _ _ = ()
+
+-- We could return sets instead of lists, if it were not for the
+-- fact that we need to lookup scopes by their existential variable.
 {-@ measure scopes @-}
 scopes :: Formula -> [(Int, Set Int)]
 scopes (Forall _ f) = scopes f
@@ -382,10 +589,10 @@ lookupR x ((y, v) : ys)
   | x == y = Just v
   | otherwise = lookupR x ys
 
-{-@ reflect isSubsetOfMaybe @-}
-isSubsetOfMaybe :: Ord a => Set a -> Maybe (Set a) -> Bool
-isSubsetOfMaybe xs (Just ys) = Set.isSubsetOf xs ys
-isSubsetOfMaybe xs Nothing = False
+{-@ reflect isSubsetOfJust @-}
+isSubsetOfJust :: Ord a => Set a -> Maybe (Set a) -> Bool
+isSubsetOfJust xs (Just ys) = Set.isSubsetOf xs ys
+isSubsetOfJust xs Nothing = False
 
 -- TODO: consider what to do when unification introduces equalities of
 -- constructors that might need to be eliminated
