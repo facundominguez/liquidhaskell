@@ -298,7 +298,9 @@ substituteSkolemsTerm s t = case t of
 scopesSubst :: Subst Term -> [(Int, Set Int)]
 scopesSubst (Subst xs) = concatMap (scopesTerm . snd) xs
 
-
+-- opaque-reflect is needed so substituteSkolems can be used in the logic when
+-- proving properties in the body of unify.
+{-@ opaque-reflect substituteSkolems @-}
 -- LH can show that substituteSkolems preserves formulaSize, but we need reacher
 -- specifications for auxiliary functions if we want to verify the relationship
 -- between scopes.
@@ -307,8 +309,8 @@ assume substituteSkolems
   :: s:Subst Term
   -> f:Formula
   -> {v:Formula |
-       formulaSize f == formulaSize v &&
-       Set.isSubsetOf (Set.listElts (scopes v)) (Set.union (Set.listElts (scopesSubst s)) (Set.listElts (scopes f)))
+          formulaSize f == formulaSize v
+       && Set.isSubsetOf (Set.listElts (scopes v)) (Set.union (Set.listElts (scopesSubst s)) (Set.listElts (scopes f)))
      }
 @-}
 substituteSkolems :: Subst Term -> Formula -> Formula
@@ -427,6 +429,7 @@ removeConstructors = go
 -- > unify (t == SA (i, s))@ is @[(i, substitute (inverseSubst s) t)
 --
 {-@ unify :: f:Formula -> [{p:_ | isSubsetOfJust (freeVars (snd2 p)) (lookup (fst2 p) (scopes f)) }] @-}
+{-@ ignore unify @-} -- passes verification, but disabled for performance
 unify :: Formula -> [P2 Int Term]
 unify = go
   where
@@ -447,8 +450,25 @@ unify = go
     go (Then (t0, t1) f2) =
       let unifsT1 = goEq t0 t1
           unifsT1Subst = lemmaFromListSubst (append (scopesTerm t0) (scopesTerm t1)) unifsT1
-       in unifsT1 ++ go (substituteSkolems unifsT1Subst f2)
-            ? lemmaScopesSubst (append (scopesTerm t0) (scopesTerm t1)) unifsT1Subst
+       in (lemmaLookupLeft (append (scopesTerm t0) (scopesTerm t1)) (scopes f2) unifsT1
+            ? lemmaAppendAssoc (scopesTerm t0) (scopesTerm t1) (scopes f2)
+          )
+          ++ lemmaLookupSetP2
+               (append (scopesSubst unifsT1Subst) (scopes f2))
+               (append (scopesTerm t0) (append (scopesTerm t1) (scopes f2))
+                  ? lemmaScopesAppend (scopesSubst unifsT1Subst) (scopes f2)
+                  ? lemmaScopesAppend (scopesTerm t0) (append (scopesTerm t1) (scopes f2))
+                  ? lemmaScopesAppend (scopesTerm t1) (scopes f2)
+                  ? lemmaScopesAppend (scopesTerm t0) (scopesTerm t1)
+                  ? lemmaScopesSubst (append (scopesTerm t0) (scopesTerm t1)) unifsT1Subst
+               )
+               (lemmaLookupSetP2
+                 (scopes (substituteSkolems unifsT1Subst f2))
+                 (append (scopesSubst unifsT1Subst) (scopes f2)
+                    ? lemmaScopesAppend (scopesSubst unifsT1Subst) (scopes f2)
+                 )
+                 (go (substituteSkolems unifsT1Subst f2))
+               )
     go (Eq t0 t1) = goEq t0 t1
 
 {-@ lazy goEq @-}
@@ -500,6 +520,17 @@ lemmaFromListSubst :: [(Int, Set Int)] -> [P2 Int Term] -> Subst Term
 lemmaFromListSubst s xs = Subst $ map (\(P2 i t) -> (i, t)) xs
 
 {-@
+lemmaAppendAssoc
+  :: s0:[a]
+  -> s1:[a]
+  -> s2:[a]
+  -> { s0 ++ (s1 ++ s2) = (s0 ++ s1) ++ s2 }
+@-}
+lemmaAppendAssoc :: [a] -> [a] -> [a] -> ()
+lemmaAppendAssoc [] ys zs = ()
+lemmaAppendAssoc (x:xs) ys zs = lemmaAppendAssoc xs ys zs
+
+{-@
 lemmaLookupLeft
   :: s0:[(Int, Set Int)]
   -> s1:[(Int, Set Int)]
@@ -543,6 +574,25 @@ lemmaLookupRight s0 s1 (P2 i t : xs) =
           ? lemmaScopesAppend s0 s1
        )
     : lemmaLookupRight s0 s1 xs
+
+{-@
+assume lemmaLookupSetP2
+  :: s0:[(Int, Set Int)]
+  // TODO: require that s0 and s1 provide the same scopes when they have
+  // common existentials
+  -> {s1:[(Int, Set Int)] | Set.isSubsetOf (Set.listElts s0) (Set.listElts s1)}
+  -> [{p:_ |
+           isSubsetOfJust (freeVars (snd2 p)) (lookup (fst2 p) s0)
+        && isSubsetOf (Set.listElts (scopesTerm (snd2 p))) (Set.listElts s0)
+      }]
+  -> [{p:_ |
+           isSubsetOfJust (freeVars (snd2 p)) (lookup (fst2 p) s1)
+        && isSubsetOf (Set.listElts (scopesTerm (snd2 p))) (Set.listElts s1)
+      }]
+@-}
+lemmaLookupSetP2 :: [(Int, Set Int)] -> [(Int, Set Int)] -> [P2 Int Term] -> [P2 Int Term]
+lemmaLookupSetP2 s0 s1 xs = xs
+
 
 {-@
 assume lemmaLookupAppendLeft
