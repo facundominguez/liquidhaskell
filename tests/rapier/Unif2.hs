@@ -210,6 +210,7 @@ mkSkolemApp v uvs = SA (v, idSubst uvs)
     idSubst vs = fromListSubst [(v, V v) | v <- vs]
 
 {-@ ignore substitute @-}
+{-@ opaque-reflect substitute @-}
 substitute :: Subst Term -> Term -> Term
 substitute s t = case t of
     V v -> case lookupSubst v s of
@@ -481,9 +482,8 @@ unify = go
                )
     go (Eq t0 t1) = goEq t0 t1
 
-{-@ lazy goEq @-}
 {-@
-assume goEq
+goEq
   :: t0:Term
   -> t1:Term
   -> [{p:_ |
@@ -493,27 +493,45 @@ assume goEq
 @-}
 goEq :: Term -> Term -> [P2 Int Term]
 -- Missing: occurs check
-goEq t (SA (i, s))
-      | Just s' <- inverseSubst $ narrowForInvertibility (freeVars t) s
-      , let t' = substitute s' t
+goEq t0 t1@(SA (i, s))
+      | Just s' <- inverseSubst $ narrowForInvertibility (freeVars t0) s
+      , let t' = substitute s' t0
         -- Scope check
       , Set.isSubsetOf (freeVars t') (domainSubst s)
           -- For the first conjunct:
-          --   prove that @Just s@ is @lookup i (scopesTerm t1)@
-          --   use lemmaScopesAppend
+          --   prove that @Just s@ is @lookup i (scopesTerm t1)@ (PLE)
+          --   prove that @freeVars t'@ is a subset of the domain of @s@ (known by scope check)
+          --   use lemmaLookupSetInt
           --
           -- For the second conjunct:
           --   prove that @scopesTerm of t'@ is @scopesTerm t0@
       =
         [P2 i t']
-goEq (SA (i, s)) t
-      | Just s' <- inverseSubst $ narrowForInvertibility (freeVars t) s
-      , let t' = substitute s' t
+          ? lemmaLookupSetInt
+              i
+              t'
+              (scopesTerm t1)
+              (append (scopesTerm t0) (scopesTerm t1)
+                 ? lemmaScopesAppend (scopesTerm t0) (scopesTerm t1)
+              )
+          ? lemmaInvSubstScopes s' t0
+goEq t0@(SA (i, s)) t1
+      | Just s' <- inverseSubst $ narrowForInvertibility (freeVars t1) s
+      , let t' = substitute s' t1
       , Set.isSubsetOf (freeVars t') (domainSubst s)
       =
         [P2 i t']
+          ? lemmaInvSubstScopes s' t1
 goEq _ _ = []
 
+-- TODO: Refine this to show that @scopesTerm t == scopesTerm (substitute s t)@
+-- whenever @s :: Subst {t:_ | isVar t}@.
+{-@
+assume lemmaInvSubstScopes
+  :: s:Subst Term -> t:Term -> { scopesTerm t = scopesTerm (substitute s t) }
+@-}
+lemmaInvSubstScopes :: Subst Term -> Term -> ()
+lemmaInvSubstScopes _ _ = ()
 
 {-@
 assume lemmaFromListSubst
@@ -602,6 +620,22 @@ assume lemmaLookupSetP2
 @-}
 lemmaLookupSetP2 :: [(Int, Set Int)] -> [(Int, Set Int)] -> [P2 Int Term] -> [P2 Int Term]
 lemmaLookupSetP2 s0 s1 xs = xs
+
+{-@
+assume lemmaLookupSetInt
+  :: i:Int
+  -> t:Term
+  -> {s0:_ |
+           isSubsetOfJust (freeVars t) (lookup i s0)
+      }
+  // TODO: require that s0 and s1 provide at most one scope for each existential
+  -> {s1:[(Int, Set Int)] | Set.isSubsetOf (Set.listElts s0) (Set.listElts s1)}
+  -> {
+          isSubsetOfJust (freeVars t) (lookup i s1)
+     }
+@-}
+lemmaLookupSetInt :: Int -> Term -> [(Int, Set Int)] -> [(Int, Set Int)] -> ()
+lemmaLookupSetInt i t s0 s1 = ()
 
 
 {-@
