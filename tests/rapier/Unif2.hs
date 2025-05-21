@@ -352,6 +352,15 @@ assume lemmaScopesAppend
 lemmaScopesAppend :: [(Int, Set Int)] -> [(Int, Set Int)] -> ()
 lemmaScopesAppend _ _ = ()
 
+{-@
+assume lemmaScopesAppend2
+  :: s0:[(Int, Set Int)]
+  -> s1:[(Int, Set Int)]
+  -> { Set.listElts (append s0 s1) = Set.union (Set.listElts s0) (Set.listElts s1) }
+@-}
+lemmaScopesAppend2 :: [(Int, Set Int)] -> [(Int, Set Int)] -> ()
+lemmaScopesAppend2 _ _ = ()
+
 
 -- | @toPrenex f@ transforms a formula into prenex normal form by moving all
 -- the universal quantifiers to the front.
@@ -442,6 +451,7 @@ unify = go
                }
              ] / [formulaSize f]
       @-}
+    {- rewriteWith go [lemmaScopesAppend, lemmaScopesAppend2] @-}
     go :: Formula -> [P2 Int Term]
     go (Forall v f) = go f
     go (Exists v f) = go f
