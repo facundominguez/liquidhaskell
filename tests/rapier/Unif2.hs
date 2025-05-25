@@ -457,11 +457,11 @@ unify = go
     go (Forall v f) = go f
     go (Exists v f) = go f
     go (Conj f1 f2) =
-      lemmaLookupLeft (scopes f1) (scopes f2) (go f1) ++ lemmaLookupRight (scopes f1) (scopes f2) (go f2)
+      castLookupLeft (scopes f1) (scopes f2) (go f1) ++ castLookupRight (scopes f1) (scopes f2) (go f2)
     go (Then (t0, t1) f2) =
       let unifsT1 = goEq t0 t1
           unifsT1Subst = lemmaFromListSubst (append (scopesTerm t0) (scopesTerm t1)) unifsT1
-       in (lemmaLookupLeft (append (scopesTerm t0) (scopesTerm t1)) (scopes f2) unifsT1
+       in (castLookupLeft (append (scopesTerm t0) (scopesTerm t1)) (scopes f2) unifsT1
             ? lemmaAppendAssoc (scopesTerm t0) (scopesTerm t1) (scopes f2)
           )
           ++ lemmaLookupSetP2
@@ -559,7 +559,7 @@ lemmaAppendAssoc [] ys zs = ()
 lemmaAppendAssoc (x:xs) ys zs = lemmaAppendAssoc xs ys zs
 
 {-@
-lemmaLookupLeft
+castLookupLeft
   :: s0:[(Int, Set Int)]
   -> s1:[(Int, Set Int)]
   -> [{p:P2 Int Term |
@@ -571,18 +571,18 @@ lemmaLookupLeft
         && isSubsetOf (Set.listElts (scopesTerm (snd2 p))) (Set.listElts (s0 ++ s1))
       }]
 @-}
-lemmaLookupLeft :: [(Int, Set Int)] -> [(Int, Set Int)] -> [P2 Int Term] -> [P2 Int Term]
-lemmaLookupLeft s0 s1 [] = []
-lemmaLookupLeft s0 s1 (P2 i t : xs) =
+castLookupLeft :: [(Int, Set Int)] -> [(Int, Set Int)] -> [P2 Int Term] -> [P2 Int Term]
+castLookupLeft s0 s1 [] = []
+castLookupLeft s0 s1 (P2 i t : xs) =
     P2 i
        (t
          ? lemmaLookupAppendLeft i s0 s1
          ? lemmaScopesAppend s0 s1
        )
-    : lemmaLookupLeft s0 s1 xs
+    : castLookupLeft s0 s1 xs
 
 {-@
-lemmaLookupRight
+castLookupRight
   :: s0:[(Int, Set Int)]
   -> s1:[(Int, Set Int)]
   -> [{p:_ |
@@ -594,14 +594,14 @@ lemmaLookupRight
         && isSubsetOf (Set.listElts (scopesTerm (snd2 p))) (Set.listElts (s0 ++ s1))
       }]
 @-}
-lemmaLookupRight :: [(Int, Set Int)] -> [(Int, Set Int)] -> [P2 Int Term] -> [P2 Int Term]
-lemmaLookupRight s0 s1 [] = []
-lemmaLookupRight s0 s1 (P2 i t : xs) =
+castLookupRight :: [(Int, Set Int)] -> [(Int, Set Int)] -> [P2 Int Term] -> [P2 Int Term]
+castLookupRight s0 s1 [] = []
+castLookupRight s0 s1 (P2 i t : xs) =
     P2 i
        (t ? lemmaLookupAppendRight i s0 s1
           ? lemmaScopesAppend s0 s1
        )
-    : lemmaLookupRight s0 s1 xs
+    : castLookupRight s0 s1 xs
 
 {-@
 assume lemmaLookupSetP2
