@@ -63,6 +63,15 @@ assume lookupSubst
 lookupSubst :: Int -> Subst e -> Maybe e
 lookupSubst i (Subst s) = lookup i s
 
+{-@
+assume deleteSubst
+  :: s:Subst a
+  -> i:Int
+  -> {v:_ | difference (domain s) (singleton i) = domain v }
+@-}
+deleteSubst :: Subst e -> Int -> Subst e
+deleteSubst (Subst s) i = Subst (Prelude.filter ((/= i) . fst) s)
+
 -------------------------------------------
 -- applying substitutions to expressions
 -------------------------------------------
@@ -92,8 +101,6 @@ substitute scope s = \case
           Lam i $
             substitute
               (insert i scope)
-              -- This has the effect of canceling the substitution of i
-              -- whatever it was in f
-              (extendSubst s i (Var i))
+              (deleteSubst s i)
               e
 
