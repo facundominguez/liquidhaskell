@@ -1,7 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
-{-@ LIQUID "--higherorder" @-}
-{-@ LIQUID "--exactdc" @-}
-module Subst where
+{-@ LIQUID "--reflection" @-}
+module Subst4 where
 
 import Data.Maybe
 import Data.Set
@@ -25,24 +24,15 @@ freshVar s = case lookupMax s of
     Nothing -> 0
     Just i -> i + 1
 
-{-@
-type ScopedExp S = {e:Exp | isSubsetOf (freeVars e) S}
-@-}
-
+{-@ type ScopedExp S = {e:Exp | isSubsetOf (freeVars e) S} @-}
 
 --------------------------------------------
--- An replaceable type for substitutions
+-- A replaceable type for substitutions
 --------------------------------------------
 
 newtype Subst e = Subst [(Int, e)]
 
 {-@ measure domain :: Subst e -> Set Int @-}
-
--- {-@ measure domain @-}
--- domain :: Subst e -> Set Int
--- domain [] = empty
--- domain ((i, _) : s) = union (singleton i) (domain s)
-
 
 {-@
 assume extendSubst
@@ -62,15 +52,6 @@ assume lookupSubst
 @-}
 lookupSubst :: Int -> Subst e -> Maybe e
 lookupSubst i (Subst s) = lookup i s
-
-{-@
-assume deleteSubst
-  :: s:Subst a
-  -> i:Int
-  -> {v:_ | difference (domain s) (singleton i) = domain v }
-@-}
-deleteSubst :: Subst e -> Int -> Subst e
-deleteSubst (Subst s) i = Subst (Prelude.filter ((/= i) . fst) s)
 
 -------------------------------------------
 -- applying substitutions to expressions

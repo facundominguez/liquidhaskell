@@ -1,6 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
-{-@ LIQUID "--higherorder" @-}
-{-@ LIQUID "--exactdc" @-}
+{-@ LIQUID "--reflection" @-}
 module Subst5 where
 
 import Data.Maybe
@@ -19,6 +18,10 @@ freeVars = \case
     Var i -> Set.singleton i
     App e0 e1 -> Set.union (freeVars e0) (freeVars e1)
     Lam i e -> difference (freeVars e) (Set.singleton i)
+
+--------------------------------------------------
+-- A type of scope sets with controlled insertion
+--------------------------------------------------
 
 data Scope = UnsafeScope (Set Int)
 {-@ data Scope = UnsafeScope (Set Int) @-}
@@ -48,6 +51,7 @@ withRefreshed
      && fst p == union s (singleton (snd p))
      }
 @-}
+-- | This is the only way to insert a variable into a scope.
 withRefreshed :: Scope -> Int -> (Scope, Int)
 withRefreshed (UnsafeScope s) i
     | Set.member i s = let j = freshVar s in (UnsafeScope (insert j s), j)
@@ -59,13 +63,11 @@ freshVar s = case lookupMax s of
     Nothing -> 0
     Just i -> i + 1
 
-{-@
-type ScopedExp S = {e:Exp | isSubsetOfScope (freeVars e) S}
-@-}
+{-@ type ScopedExp S = {e:Exp | isSubsetOfScope (freeVars e) S} @-}
 
 
 --------------------------------------------
--- An replaceable type for substitutions
+-- A replaceable type for substitutions
 --------------------------------------------
 
 newtype Subst e = Subst [(Int, e)]
