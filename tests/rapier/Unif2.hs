@@ -19,12 +19,6 @@ import Language.Haskell.Liquid.ProofCombinators
 
 {-@ infixr ++ @-}
 
--- | We use a custom type for pairs to workaround bugs in Liquid Haskell
--- https://github.com/ucsd-progsys/liquidhaskell/issues/2536
-data P2 a b = P2 { fst2 :: a, snd2 :: b }
-  deriving (Eq, Ord, Show)
-{-@ data P2 a b = P2 { fst2 :: a, snd2 :: b } @-}
-
 -- | We have plain variables
 type Var = Int
 -- | And we have applications of skolem functions for existential variables that
@@ -57,8 +51,8 @@ extendSubst (Subst s) i e = Subst ((i, e) : s)
 fromListSubst :: [(Var, t)] -> Subst t
 fromListSubst = Subst
 
-fromListSubstP2 :: [P2 Var t] -> Subst t
-fromListSubstP2 = Subst . map (\(P2 i t) -> (i, t))
+fromListSubstP2 :: [(Var, t)] -> Subst t
+fromListSubstP2 = Subst . map (\(i, t) -> (i, t))
 
 -----------------------
 -- The logic language
@@ -438,22 +432,22 @@ removeConstructors = go
 --
 -- > unify (t == SA (i, s))@ is @[(i, substitute (inverseSubst s) t)
 --
-{-@ unify :: f:Formula -> [{p:_ | isSubsetOfJust (freeVars (snd2 p)) (lookup (fst2 p) (scopes f)) }] @-}
-{-@ ignore unify @-} -- passes verification, but disabled for performance
-unify :: Formula -> [P2 Int Term]
+{-@ unify :: f:Formula -> [{p:_ | isSubsetOfJust (freeVars (snd p)) (lookup (fst p) (scopes f)) }] @-}
+{- ignore unify @-} -- passes verification, but disabled for performance
+unify :: Formula -> [(Int, Term)]
 unify = go
   where
     {-@
         go
           :: f:Formula
           -> [ {p:_ |
-                   isSubsetOfJust (freeVars (snd2 p)) (lookup (fst2 p) (scopes f))
-                && isSubsetOf (Set.listElts (scopesTerm (snd2 p))) (Set.listElts (scopes f))
+                   isSubsetOfJust (freeVars (snd p)) (lookup (fst p) (scopes f))
+                && isSubsetOf (Set.listElts (scopesTerm (snd p))) (Set.listElts (scopes f))
                }
              ] / [formulaSize f]
       @-}
     {- rewriteWith go [lemmaScopesAppend, lemmaScopesAppend2] @-}
-    go :: Formula -> [P2 Int Term]
+    go :: Formula -> [(Int, Term)]
     go (Forall v f) = go f
     go (Exists v f) = go f
     go (Conj f1 f2) =
@@ -487,11 +481,11 @@ goEq
   :: t0:Term
   -> t1:Term
   -> [{p:_ |
-           isSubsetOfJust (freeVars (snd2 p)) (lookup (fst2 p) (scopesTerm t0 ++ scopesTerm t1))
-        && isSubsetOf (Set.listElts (scopesTerm (snd2 p))) (Set.listElts (scopesTerm t0 ++ scopesTerm t1))
+           isSubsetOfJust (freeVars (snd p)) (lookup (fst p) (scopesTerm t0 ++ scopesTerm t1))
+        && isSubsetOf (Set.listElts (scopesTerm (snd p))) (Set.listElts (scopesTerm t0 ++ scopesTerm t1))
       }]
 @-}
-goEq :: Term -> Term -> [P2 Int Term]
+goEq :: Term -> Term -> [(Int, Term)]
 -- Missing: occurs check
 goEq t0 t1@(SA (i, s))
       | Just s' <- inverseSubst $ narrowForInvertibility (freeVars t0) s
@@ -506,7 +500,7 @@ goEq t0 t1@(SA (i, s))
           -- For the second conjunct:
           --   prove that @scopesTerm of t'@ is @scopesTerm t0@
       =
-        [P2 i t']
+        [(i, t')]
           ? lemmaLookupSetInt
               i
               t'
@@ -520,7 +514,7 @@ goEq t0@(SA (i, s)) t1
       , let t' = substitute s' t1
       , Set.isSubsetOf (freeVars t') (domainSubst s)
       =
-        [P2 i t']
+        [(i, t')]
           ? lemmaInvSubstScopes s' t1
 goEq _ _ = []
 
@@ -537,15 +531,15 @@ lemmaInvSubstScopes _ _ = ()
 assume lemmaFromListSubst
   :: s:[(Int, Set Int)]
   -> [{p:_ |
-        isSubsetOf (Set.listElts (scopesTerm (snd2 p))) (Set.listElts s)
+        isSubsetOf (Set.listElts (scopesTerm (snd p))) (Set.listElts s)
       }]
   -> Subst
       ({vt:Term |
              isSubsetOf (Set.listElts (scopesTerm vt)) (Set.listElts s)
         })
 @-}
-lemmaFromListSubst :: [(Int, Set Int)] -> [P2 Int Term] -> Subst Term
-lemmaFromListSubst s xs = Subst $ map (\(P2 i t) -> (i, t)) xs
+lemmaFromListSubst :: [(Int, Set Int)] -> [(Int, Term)] -> Subst Term
+lemmaFromListSubst s xs = Subst $ map (\(i, t) -> (i, t)) xs
 
 {-@
 lemmaAppendAssoc
@@ -562,46 +556,46 @@ lemmaAppendAssoc (x:xs) ys zs = lemmaAppendAssoc xs ys zs
 castLookupLeft
   :: s0:[(Int, Set Int)]
   -> s1:[(Int, Set Int)]
-  -> [{p:P2 Int Term |
-             isSubsetOfJust (freeVars (snd2 p)) (lookup (fst2 p) s0)
-          && isSubsetOf (Set.listElts (scopesTerm (snd2 p))) (Set.listElts s0)
+  -> [{p:(Int, Term) |
+             isSubsetOfJust (freeVars (snd p)) (lookup (fst p) s0)
+          && isSubsetOf (Set.listElts (scopesTerm (snd p))) (Set.listElts s0)
       }]
-  -> [{p:P2 Int Term |
-           isSubsetOfJust (freeVars (snd2 p)) (lookup (fst2 p) (s0 ++ s1))
-        && isSubsetOf (Set.listElts (scopesTerm (snd2 p))) (Set.listElts (s0 ++ s1))
+  -> [{p:(Int, Term) |
+           isSubsetOfJust (freeVars (snd p)) (lookup (fst p) (s0 ++ s1))
+        && isSubsetOf (Set.listElts (scopesTerm (snd p))) (Set.listElts (s0 ++ s1))
       }]
 @-}
-castLookupLeft :: [(Int, Set Int)] -> [(Int, Set Int)] -> [P2 Int Term] -> [P2 Int Term]
+castLookupLeft :: [(Int, Set Int)] -> [(Int, Set Int)] -> [(Int, Term)] -> [(Int, Term)]
 castLookupLeft s0 s1 [] = []
-castLookupLeft s0 s1 (P2 i t : xs) =
-    P2 i
-       (t
+castLookupLeft s0 s1 ((i, t) : xs) =
+    ( i
+    ,  (t
          ? lemmaLookupAppendLeft i s0 s1
          ? lemmaScopesAppend s0 s1
        )
-    : castLookupLeft s0 s1 xs
+    ) : castLookupLeft s0 s1 xs
 
 {-@
 castLookupRight
   :: s0:[(Int, Set Int)]
   -> s1:[(Int, Set Int)]
   -> [{p:_ |
-           isSubsetOfJust (freeVars (snd2 p)) (lookup (fst2 p) s1)
-        && isSubsetOf (Set.listElts (scopesTerm (snd2 p))) (Set.listElts s1)
+           isSubsetOfJust (freeVars (snd p)) (lookup (fst p) s1)
+        && isSubsetOf (Set.listElts (scopesTerm (snd p))) (Set.listElts s1)
       }]
   -> [{p:_ |
-           isSubsetOfJust (freeVars (snd2 p)) (lookup (fst2 p) (s0 ++ s1))
-        && isSubsetOf (Set.listElts (scopesTerm (snd2 p))) (Set.listElts (s0 ++ s1))
+           isSubsetOfJust (freeVars (snd p)) (lookup (fst p) (s0 ++ s1))
+        && isSubsetOf (Set.listElts (scopesTerm (snd p))) (Set.listElts (s0 ++ s1))
       }]
 @-}
-castLookupRight :: [(Int, Set Int)] -> [(Int, Set Int)] -> [P2 Int Term] -> [P2 Int Term]
+castLookupRight :: [(Int, Set Int)] -> [(Int, Set Int)] -> [(Int, Term)] -> [(Int, Term)]
 castLookupRight s0 s1 [] = []
-castLookupRight s0 s1 (P2 i t : xs) =
-    P2 i
-       (t ? lemmaLookupAppendRight i s0 s1
+castLookupRight s0 s1 ((i, t) : xs) =
+    ( i
+    , (t ? lemmaLookupAppendRight i s0 s1
           ? lemmaScopesAppend s0 s1
-       )
-    : castLookupRight s0 s1 xs
+      )
+    ) : castLookupRight s0 s1 xs
 
 {-@
 assume lemmaLookupSetP2
@@ -610,15 +604,15 @@ assume lemmaLookupSetP2
   // common existentials
   -> {s1:[(Int, Set Int)] | Set.isSubsetOf (Set.listElts s0) (Set.listElts s1)}
   -> [{p:_ |
-           isSubsetOfJust (freeVars (snd2 p)) (lookup (fst2 p) s0)
-        && isSubsetOf (Set.listElts (scopesTerm (snd2 p))) (Set.listElts s0)
+           isSubsetOfJust (freeVars (snd p)) (lookup (fst p) s0)
+        && isSubsetOf (Set.listElts (scopesTerm (snd p))) (Set.listElts s0)
       }]
   -> [{p:_ |
-           isSubsetOfJust (freeVars (snd2 p)) (lookup (fst2 p) s1)
-        && isSubsetOf (Set.listElts (scopesTerm (snd2 p))) (Set.listElts s1)
+           isSubsetOfJust (freeVars (snd p)) (lookup (fst p) s1)
+        && isSubsetOf (Set.listElts (scopesTerm (snd p))) (Set.listElts s1)
       }]
 @-}
-lemmaLookupSetP2 :: [(Int, Set Int)] -> [(Int, Set Int)] -> [P2 Int Term] -> [P2 Int Term]
+lemmaLookupSetP2 :: [(Int, Set Int)] -> [(Int, Set Int)] -> [(Int, Term)] -> [(Int, Term)]
 lemmaLookupSetP2 s0 s1 xs = xs
 
 {-@
@@ -755,15 +749,15 @@ inverseSubst (Subst xs) = Subst <$> go xs
 --- | Assign terms to existential variables in an attempt to make a formula
 -- true.
 {-@ ignore unifyFormula @-}
-unifyFormula :: Formula -> [P2 Int Term]
+unifyFormula :: Formula -> [(Int, Term)]
 unifyFormula = unifyFormula' False
 
 {-@ ignore unifyFormulaTrace @-}
-unifyFormulaTrace :: Formula -> [P2 Int Term]
+unifyFormulaTrace :: Formula -> [(Int, Term)]
 unifyFormulaTrace = unifyFormula' True
 
 {-@ ignore unifyFormula' @-}
-unifyFormula' :: Bool -> Formula -> [P2 Int Term]
+unifyFormula' :: Bool -> Formula -> [(Int, Term)]
 unifyFormula' mustTrace =
     traceUnify
           "                     unify" .
@@ -784,13 +778,13 @@ unifyFormula' mustTrace =
     trace label f
       | mustTrace = Debug.Trace.trace (label ++ ": " ++ ppFormula prettyName f) f
       | otherwise = f
-    traceUnify :: String -> [P2 Int Term] -> [P2 Int Term]
+    traceUnify :: String -> [(Int, Term)] -> [(Int, Term)]
     traceUnify label xs
       | mustTrace = Debug.Trace.trace (label ++ ": " ++ showUnification xs) xs
       | otherwise = xs
-    showUnification :: [P2 Int Term] -> String
+    showUnification :: [(Int, Term)] -> String
     showUnification xs =
-      let xs' = map (\(P2 i t) -> (prettyName i, ppTerm prettyName t)) xs
+      let xs' = map (\(i, t) -> (prettyName i, ppTerm prettyName t)) xs
        in "[" ++ List.intercalate ", " (map (\(i, t) -> i ++ ":=" ++ t) xs') ++ "]"
 
 -- pretty printing
@@ -900,7 +894,7 @@ test = do
   where
     runUnificationTest (name, (f, expected)) = do
       let result = unifyFormula f
-      if result == map (uncurry P2) expected
+      if result == expected
         then putStrLn $ concat ["Test ", name, ": Passed"]
         else putStrLn $
                concat ["Test ", name, ": Failed\n", show expected, " but got ", show result, "\n"]
