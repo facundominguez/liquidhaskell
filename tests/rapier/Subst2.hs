@@ -84,23 +84,13 @@ substitute
   -> ScopedExp scope
 @-}
 substitute :: Set Int -> Subst Exp -> Exp -> Exp
-substitute scope s = \case
-    Var i -> case lookupSubst i s of
-      Nothing -> Var i
-      Just e -> e
-    App e0 e1 -> App (substitute scope s e0) (substitute scope s e1)
-    Lam i e
-      | member i scope ->
-          let j = freshVar scope
-           in Lam j $
-                substitute
-                  (insert j scope)
-                  (extendSubst s i (Var j))
-                  e
-      | otherwise ->
-          Lam i $
-            substitute
-              (insert i scope)
-              (deleteSubst s i)
-              e
+substitute scope s e0 = case e0 of
+  Var i -> case lookupSubst i s of Nothing -> e0; Just e -> e
+  App e0 e1 -> App (substitute scope s e0) (substitute scope s e1)
+  Lam i e
+    | member i scope,
+      let j = freshVar scope ->
+        Lam j $ substitute (insert j scope) (extendSubst s i (Var j)) e
+    | otherwise ->
+        Lam i $ substitute (insert i scope) (deleteSubst s i) e
 
