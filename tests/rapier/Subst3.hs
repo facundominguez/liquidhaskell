@@ -131,14 +131,8 @@ lookupAssoc x ((y, b) : xs)
 substitute
   :: scope:Set Int
   -> s:Subst (ScopedExp scope)
-  -> {ei:Exp | isSubsetOf (difference (freeVars ei) (domain (asAssoc s))) scope }
-  -> {v:Exp
-     |    freeVars v
-       ==
-          union
-            (difference (freeVars ei) (domain (asAssoc s)))
-            (freeVarsSubst (freeVars ei) (asAssoc s))
-     }
+  -> ei:ScopedExp (domain (asAssoc s))
+  -> {v:Exp | freeVars v == freeVarsSubst (freeVars ei) (asAssoc s)}
 @-}
 substitute :: Set Int -> Subst Exp -> Exp -> Exp
 substitute scope s = \case
