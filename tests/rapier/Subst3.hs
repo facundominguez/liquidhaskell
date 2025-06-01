@@ -1,8 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
-{-@ LIQUID "--higherorder" @-}
-{-@ LIQUID "--exactdc" @-}
+{-@ LIQUID "--reflection" @-}
 {-@ LIQUID "--ple" @-}
-{- LIQUID "--smtsolver=cvc5" @-}
 module Subst3 where
 
 import Data.Maybe
@@ -137,7 +135,7 @@ substitute
 substitute :: Set Int -> Subst Exp -> Exp -> Exp
 substitute scope s = \case
     Var i -> case lookupSubst i s of
-      Nothing -> Var i  ? lemma_freeVarsSubst_sing i (asAssoc s)
+      Nothing -> Var i
       Just e -> e ? lemma_freeVarsSubst_sing i (asAssoc s)
     App e0 e1 ->
       App
@@ -227,7 +225,7 @@ lemma_freeVarsSubst_sing i ((j, e) : s) | i == j =
         union
           (freeVars e)
           (freeVarsSubst (difference (singleton i) (singleton j)) s)
-    ==. -- inductive hypothesis
+    ==. -- evaluate difference
         union
           (freeVars e)
           (empty ? lemma_freeVarsSubst_empty empty s)
