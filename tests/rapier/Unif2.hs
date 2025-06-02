@@ -30,7 +30,7 @@ type Var = Int
 -- All occurrences of a skolem function must have pending substitutions
 -- with exactly the same domain since the domain of the substitution gives
 -- the arity of the skolem function.
-type SkolemApp = (Int, Subst Term)
+type SkolemApp = (Var, Subst Term)
 
 --------------------------------------
 -- Substitutions and their operations
@@ -89,11 +89,22 @@ freeVars = \case
     L t -> freeVars t
     P t0 t1 -> Set.union (freeVars t0) (freeVars t1)
 
-{-@ opaque-reflect freeVarsSubst @-}
+skolemSet :: Term -> Set Var
+skolemSet = \case
+    V _ -> Set.empty
+    SA (i, s) -> Set.insert i (skolemAppsSubst s)
+    U -> Set.empty
+    L t -> skolemSet t
+    P t0 t1 -> Set.union (skolemSet t0) (skolemSet t1)
 
+{-@ opaque-reflect freeVarsSubst @-}
 {-@ ignore freeVarsSubst @-}
 freeVarsSubst :: Subst Term -> Set Int
 freeVarsSubst (Subst s) = Set.unions $ map (freeVars . snd) s
+
+{-@ ignore skolemAppsSubst @-}
+skolemAppsSubst :: Subst Term -> Set Int
+skolemAppsSubst (Subst s) = Set.unions $ map (skolemSet . snd) s
 
 {-@ assume freshVar :: s:Set Int -> {v:Int | not (member v s)} @-}
 freshVar :: Set Int -> Int
@@ -290,7 +301,7 @@ substituteSkolemsTerm s t = case t of
 
 
 {-@ opaque-reflect scopesSubst @-}
-scopesSubst :: Subst Term -> [(Int, Set Int)]
+scopesSubst :: Subst Term -> [(Var, Set Int)]
 scopesSubst (Subst xs) = concatMap (scopesTerm . snd) xs
 
 -- opaque-reflect is needed so substituteSkolems can be used in the logic when
@@ -331,29 +342,29 @@ substituteSkolems s = \case
 
 {-@
 assume lemmaScopesSubst
-  :: s:[(Int, Set Int)]
+  :: s:[(Var, Set Int)]
   -> ss:Subst {t:Term | isSubsetOf (Set.listElts (scopesTerm t)) (Set.listElts s)}
   -> { Set.isSubsetOf (Set.listElts (scopesSubst ss)) (Set.listElts s) }
 @-}
-lemmaScopesSubst :: [(Int, Set Int)] -> Subst Term -> ()
+lemmaScopesSubst :: [(Var, Set Int)] -> Subst Term -> ()
 lemmaScopesSubst _ _ = ()
 
 {-@
 assume lemmaScopesAppend
-  :: s0:[(Int, Set Int)]
-  -> s1:[(Int, Set Int)]
+  :: s0:[(Var, Set Int)]
+  -> s1:[(Var, Set Int)]
   -> { Set.listElts (s0 ++ s1) = Set.union (Set.listElts s0) (Set.listElts s1) }
 @-}
-lemmaScopesAppend :: [(Int, Set Int)] -> [(Int, Set Int)] -> ()
+lemmaScopesAppend :: [(Var, Set Int)] -> [(Var, Set Int)] -> ()
 lemmaScopesAppend _ _ = ()
 
 {-@
 assume lemmaScopesAppend2
-  :: s0:[(Int, Set Int)]
-  -> s1:[(Int, Set Int)]
+  :: s0:[(Var, Set Int)]
+  -> s1:[(Var, Set Int)]
   -> { Set.listElts (append s0 s1) = Set.union (Set.listElts s0) (Set.listElts s1) }
 @-}
-lemmaScopesAppend2 :: [(Int, Set Int)] -> [(Int, Set Int)] -> ()
+lemmaScopesAppend2 :: [(Var, Set Int)] -> [(Var, Set Int)] -> ()
 lemmaScopesAppend2 _ _ = ()
 
 
@@ -425,7 +436,7 @@ removeConstructors = go
 
 -- | Assign terms to skolem functions.
 --
--- When @unify@ returns pairs @(i, t) :: (Int, Term)@, @t@'s free variables are
+-- When @unify@ returns pairs @(i, t) :: (Var, Term)@, @t@'s free variables are
 -- in the scope of @i@ (the domain of the accompanying substitution).
 --
 -- Example:
@@ -433,8 +444,7 @@ removeConstructors = go
 -- > unify (t == SA (i, s))@ is @[(i, substitute (inverseSubst s) t)
 --
 {-@ unify :: f:Formula -> [{p:_ | isSubsetOfJust (freeVars (snd p)) (lookup (fst p) (scopes f)) }] @-}
-{- ignore unify @-} -- passes verification, but disabled for performance
-unify :: Formula -> [(Int, Term)]
+unify :: Formula -> [(Var, Term)]
 unify = go
   where
     {-@
@@ -447,13 +457,13 @@ unify = go
              ] / [formulaSize f]
       @-}
     {- rewriteWith go [lemmaScopesAppend, lemmaScopesAppend2] @-}
-    go :: Formula -> [(Int, Term)]
+    go :: Formula -> [(Var, Term)]
     go (Forall v f) = go f
     go (Exists v f) = go f
     go (Conj f1 f2) =
       castLookupLeft (scopes f1) (scopes f2) (go f1) ++ castLookupRight (scopes f1) (scopes f2) (go f2)
     go (Then (t0, t1) f2) =
-      let unifsT1 = goEq t0 t1
+      let unifsT1 = unifyEq t0 t1
           unifsT1Subst = lemmaFromListSubst (append (scopesTerm t0) (scopesTerm t1)) unifsT1
        in (castLookupLeft (append (scopesTerm t0) (scopesTerm t1)) (scopes f2) unifsT1
             ? lemmaAppendAssoc (scopesTerm t0) (scopesTerm t1) (scopes f2)
@@ -474,10 +484,10 @@ unify = go
                  )
                  (go (substituteSkolems unifsT1Subst f2))
                )
-    go (Eq t0 t1) = goEq t0 t1
+    go (Eq t0 t1) = unifyEq t0 t1
 
 {-@
-goEq
+unifyEq
   :: t0:Term
   -> t1:Term
   -> [{p:_ |
@@ -485,13 +495,13 @@ goEq
         && isSubsetOf (Set.listElts (scopesTerm (snd p))) (Set.listElts (scopesTerm t0 ++ scopesTerm t1))
       }]
 @-}
-goEq :: Term -> Term -> [(Int, Term)]
--- Missing: occurs check
-goEq t0 t1@(SA (i, s))
+unifyEq :: Term -> Term -> [(Var, Term)]
+unifyEq t0 t1@(SA (i, s))
       | Just s' <- inverseSubst $ narrowForInvertibility (freeVars t0) s
       , let t' = substitute s' t0
+      , not (Set.member i (skolemSet t'))
         -- Scope check
-      , Set.isSubsetOf (freeVars t') (domainSubst s)
+      , Set.isSubsetOf (freeVars t') (domain s)
           -- For the first conjunct:
           --   prove that @Just s@ is @lookup i (scopesTerm t1)@ (PLE)
           --   prove that @freeVars t'@ is a subset of the domain of @s@ (known by scope check)
@@ -509,14 +519,15 @@ goEq t0 t1@(SA (i, s))
                  ? lemmaScopesAppend (scopesTerm t0) (scopesTerm t1)
               )
           ? lemmaInvSubstScopes s' t0
-goEq t0@(SA (i, s)) t1
+unifyEq t0@(SA (i, s)) t1
       | Just s' <- inverseSubst $ narrowForInvertibility (freeVars t1) s
       , let t' = substitute s' t1
-      , Set.isSubsetOf (freeVars t') (domainSubst s)
+      , not (Set.member i (skolemSet t'))
+      , Set.isSubsetOf (freeVars t') (domain s)
       =
         [(i, t')]
           ? lemmaInvSubstScopes s' t1
-goEq _ _ = []
+unifyEq _ _ = []
 
 -- TODO: Refine this to show that @scopesTerm t == scopesTerm (substitute s t)@
 -- whenever @s :: Subst {t:_ | isVar t}@.
@@ -529,7 +540,7 @@ lemmaInvSubstScopes _ _ = ()
 
 {-@
 assume lemmaFromListSubst
-  :: s:[(Int, Set Int)]
+  :: s:[(Var, Set Int)]
   -> [{p:_ |
         isSubsetOf (Set.listElts (scopesTerm (snd p))) (Set.listElts s)
       }]
@@ -538,7 +549,7 @@ assume lemmaFromListSubst
              isSubsetOf (Set.listElts (scopesTerm vt)) (Set.listElts s)
         })
 @-}
-lemmaFromListSubst :: [(Int, Set Int)] -> [(Int, Term)] -> Subst Term
+lemmaFromListSubst :: [(Var, Set Int)] -> [(Var, Term)] -> Subst Term
 lemmaFromListSubst s xs = Subst $ map (\(i, t) -> (i, t)) xs
 
 {-@
@@ -554,18 +565,18 @@ lemmaAppendAssoc (x:xs) ys zs = lemmaAppendAssoc xs ys zs
 
 {-@
 castLookupLeft
-  :: s0:[(Int, Set Int)]
-  -> s1:[(Int, Set Int)]
-  -> [{p:(Int, Term) |
+  :: s0:[(Var, Set Int)]
+  -> s1:[(Var, Set Int)]
+  -> [{p:(Var, Term) |
              isSubsetOfJust (freeVars (snd p)) (lookup (fst p) s0)
           && isSubsetOf (Set.listElts (scopesTerm (snd p))) (Set.listElts s0)
       }]
-  -> [{p:(Int, Term) |
+  -> [{p:(Var, Term) |
            isSubsetOfJust (freeVars (snd p)) (lookup (fst p) (s0 ++ s1))
         && isSubsetOf (Set.listElts (scopesTerm (snd p))) (Set.listElts (s0 ++ s1))
       }]
 @-}
-castLookupLeft :: [(Int, Set Int)] -> [(Int, Set Int)] -> [(Int, Term)] -> [(Int, Term)]
+castLookupLeft :: [(Var, Set Int)] -> [(Var, Set Int)] -> [(Var, Term)] -> [(Var, Term)]
 castLookupLeft s0 s1 [] = []
 castLookupLeft s0 s1 ((i, t) : xs) =
     ( i
@@ -577,8 +588,8 @@ castLookupLeft s0 s1 ((i, t) : xs) =
 
 {-@
 castLookupRight
-  :: s0:[(Int, Set Int)]
-  -> s1:[(Int, Set Int)]
+  :: s0:[(Var, Set Int)]
+  -> s1:[(Var, Set Int)]
   -> [{p:_ |
            isSubsetOfJust (freeVars (snd p)) (lookup (fst p) s1)
         && isSubsetOf (Set.listElts (scopesTerm (snd p))) (Set.listElts s1)
@@ -588,7 +599,7 @@ castLookupRight
         && isSubsetOf (Set.listElts (scopesTerm (snd p))) (Set.listElts (s0 ++ s1))
       }]
 @-}
-castLookupRight :: [(Int, Set Int)] -> [(Int, Set Int)] -> [(Int, Term)] -> [(Int, Term)]
+castLookupRight :: [(Var, Set Int)] -> [(Var, Set Int)] -> [(Var, Term)] -> [(Var, Term)]
 castLookupRight s0 s1 [] = []
 castLookupRight s0 s1 ((i, t) : xs) =
     ( i
@@ -599,10 +610,10 @@ castLookupRight s0 s1 ((i, t) : xs) =
 
 {-@
 assume lemmaLookupSetP2
-  :: s0:[(Int, Set Int)]
+  :: s0:[(Var, Set Int)]
   // TODO: require that s0 and s1 provide the same scopes when they have
   // common existentials
-  -> {s1:[(Int, Set Int)] | Set.isSubsetOf (Set.listElts s0) (Set.listElts s1)}
+  -> {s1:[(Var, Set Int)] | Set.isSubsetOf (Set.listElts s0) (Set.listElts s1)}
   -> [{p:_ |
            isSubsetOfJust (freeVars (snd p)) (lookup (fst p) s0)
         && isSubsetOf (Set.listElts (scopesTerm (snd p))) (Set.listElts s0)
@@ -612,7 +623,7 @@ assume lemmaLookupSetP2
         && isSubsetOf (Set.listElts (scopesTerm (snd p))) (Set.listElts s1)
       }]
 @-}
-lemmaLookupSetP2 :: [(Int, Set Int)] -> [(Int, Set Int)] -> [(Int, Term)] -> [(Int, Term)]
+lemmaLookupSetP2 :: [(Var, Set Int)] -> [(Var, Set Int)] -> [(Var, Term)] -> [(Var, Term)]
 lemmaLookupSetP2 s0 s1 xs = xs
 
 {-@
@@ -623,36 +634,36 @@ assume lemmaLookupSetInt
            isSubsetOfJust (freeVars t) (lookup i s0)
       }
   // TODO: require that s0 and s1 provide at most one scope for each existential
-  -> {s1:[(Int, Set Int)] | Set.isSubsetOf (Set.listElts s0) (Set.listElts s1)}
+  -> {s1:[(Var, Set Int)] | Set.isSubsetOf (Set.listElts s0) (Set.listElts s1)}
   -> {
           isSubsetOfJust (freeVars t) (lookup i s1)
      }
 @-}
-lemmaLookupSetInt :: Int -> Term -> [(Int, Set Int)] -> [(Int, Set Int)] -> ()
+lemmaLookupSetInt :: Int -> Term -> [(Var, Set Int)] -> [(Var, Set Int)] -> ()
 lemmaLookupSetInt i t s0 s1 = ()
 
 
 {-@
 assume lemmaLookupAppendLeft
   :: i:Int
-  -> xs:[(Int, a)]
-  -> ys:[(Int, a)]
+  -> xs:[(Var, a)]
+  -> ys:[(Var, a)]
   -> { lookup i xs == lookup i (xs ++ ys) }
 @-}
-lemmaLookupAppendLeft :: Int -> [(Int, a)] -> [(Int, a)] -> ()
+lemmaLookupAppendLeft :: Int -> [(Var, a)] -> [(Var, a)] -> ()
 lemmaLookupAppendLeft _ _ _ = ()
 
 {-@
 assume lemmaLookupAppendRight
   :: i:Int
-  -> xs:[(Int, a)]
+  -> xs:[(Var, a)]
 // TODO: Here we would use the invariant that all occurrences of the same
 // existential have the same scope.
-//  -> {ys:[(Int, a)] | lookupsMatchIfSucceed (lookup i xs) (lookup i ys) }
-  -> ys:[(Int, a)]
+//  -> {ys:[(Var, a)] | lookupsMatchIfSucceed (lookup i xs) (lookup i ys) }
+  -> ys:[(Var, a)]
   -> { lookup i ys == lookup i (xs ++ ys) }
 @-}
-lemmaLookupAppendRight :: Int -> [(Int, a)] -> [(Int, a)] -> ()
+lemmaLookupAppendRight :: Int -> [(Var, a)] -> [(Var, a)] -> ()
 lemmaLookupAppendRight _ _ _ = ()
 
 {-@ reflect lookupsMatchIfSucceed @-}
@@ -664,7 +675,7 @@ lookupsMatchIfSucceed (Just x) (Just y) = x == y
 -- We could return sets instead of lists, if it were not for the
 -- fact that we need to lookup scopes by their existential variable.
 {-@ reflect scopes @-}
-scopes :: Formula -> [(Int, Set Int)]
+scopes :: Formula -> [(Var, Set Int)]
 scopes (Forall _ f) = scopes f
 scopes (Exists _ f) = scopes f
 scopes (Conj f1 f2) = scopes f1 ++ scopes f2
@@ -672,17 +683,17 @@ scopes (Then (t0, t1) f2) = scopesTerm t0 ++ scopesTerm t1 ++ scopes f2
 scopes (Eq t0 t1) = scopesTerm t0 ++ scopesTerm t1
 
 {-@ reflect scopesTerm @-}
-scopesTerm :: Term -> [(Int, Set Int)]
+scopesTerm :: Term -> [(Var, Set Int)]
 scopesTerm (V i) = []
-scopesTerm (SA (i, s)) = [(i, domainSubst s)]
+scopesTerm (SA (i, s)) = [(i, domain s)]
 scopesTerm U = []
 scopesTerm (L t) = scopesTerm t
 scopesTerm (P t0 t1) = scopesTerm t0 ++ scopesTerm t1
 
-{-@ opaque-reflect domainSubst @-}
-{-@ ignore domainSubst @-}
-domainSubst :: Subst e -> Set Int
-domainSubst (Subst xs) = Set.fromList $ map fst xs
+{-@ opaque-reflect domain @-}
+{-@ ignore domain @-}
+domain :: Subst e -> Set Int
+domain (Subst xs) = Set.fromList $ map fst xs
 
 {-@ assume reflect ++ as append @-}
 
@@ -749,15 +760,15 @@ inverseSubst (Subst xs) = Subst <$> go xs
 --- | Assign terms to existential variables in an attempt to make a formula
 -- true.
 {-@ ignore unifyFormula @-}
-unifyFormula :: Formula -> [(Int, Term)]
+unifyFormula :: Formula -> [(Var, Term)]
 unifyFormula = unifyFormula' False
 
 {-@ ignore unifyFormulaTrace @-}
-unifyFormulaTrace :: Formula -> [(Int, Term)]
+unifyFormulaTrace :: Formula -> [(Var, Term)]
 unifyFormulaTrace = unifyFormula' True
 
 {-@ ignore unifyFormula' @-}
-unifyFormula' :: Bool -> Formula -> [(Int, Term)]
+unifyFormula' :: Bool -> Formula -> [(Var, Term)]
 unifyFormula' mustTrace =
     traceUnify
           "                     unify" .
@@ -778,11 +789,11 @@ unifyFormula' mustTrace =
     trace label f
       | mustTrace = Debug.Trace.trace (label ++ ": " ++ ppFormula prettyName f) f
       | otherwise = f
-    traceUnify :: String -> [(Int, Term)] -> [(Int, Term)]
+    traceUnify :: String -> [(Var, Term)] -> [(Var, Term)]
     traceUnify label xs
       | mustTrace = Debug.Trace.trace (label ++ ": " ++ showUnification xs) xs
       | otherwise = xs
-    showUnification :: [(Int, Term)] -> String
+    showUnification :: [(Var, Term)] -> String
     showUnification xs =
       let xs' = map (\(i, t) -> (prettyName i, ppTerm prettyName t)) xs
        in "[" ++ List.intercalate ", " (map (\(i, t) -> i ++ ":=" ++ t) xs') ++ "]"
