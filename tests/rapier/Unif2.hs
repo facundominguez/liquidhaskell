@@ -89,6 +89,7 @@ freeVars = \case
     L t -> freeVars t
     P t0 t1 -> Set.union (freeVars t0) (freeVars t1)
 
+{-@ opaque-reflect skolemSet @-}
 skolemSet :: Term -> Set Var
 skolemSet = \case
     V _ -> Set.empty
@@ -443,48 +444,42 @@ removeConstructors = go
 --
 -- > unify (t == SA (i, s))@ is @[(i, substitute (inverseSubst s) t)
 --
-{-@ unify :: f:Formula -> [{p:_ | isSubsetOfJust (freeVars (snd p)) (lookup (fst p) (scopes f)) }] @-}
+{-@
+unify
+  :: f:Formula
+  -> [{p:_ |
+           isSubsetOfJust (freeVars (snd p)) (lookup (fst p) (scopes f))
+        && isSubsetOf (Set.listElts (scopesTerm (snd p))) (Set.listElts (scopes f))
+      }] / [formulaSize f]
+@-}
 unify :: Formula -> [(Var, Term)]
-unify = go
-  where
-    {-@
-        go
-          :: f:Formula
-          -> [ {p:_ |
-                   isSubsetOfJust (freeVars (snd p)) (lookup (fst p) (scopes f))
-                && isSubsetOf (Set.listElts (scopesTerm (snd p))) (Set.listElts (scopes f))
-               }
-             ] / [formulaSize f]
-      @-}
-    {- rewriteWith go [lemmaScopesAppend, lemmaScopesAppend2] @-}
-    go :: Formula -> [(Var, Term)]
-    go (Forall v f) = go f
-    go (Exists v f) = go f
-    go (Conj f1 f2) =
-      castLookupLeft (scopes f1) (scopes f2) (go f1) ++ castLookupRight (scopes f1) (scopes f2) (go f2)
-    go (Then (t0, t1) f2) =
-      let unifsT1 = unifyEq t0 t1
-          unifsT1Subst = lemmaFromListSubst (append (scopesTerm t0) (scopesTerm t1)) unifsT1
-       in (castLookupLeft (append (scopesTerm t0) (scopesTerm t1)) (scopes f2) unifsT1
-            ? lemmaAppendAssoc (scopesTerm t0) (scopesTerm t1) (scopes f2)
-          )
-          ++ lemmaLookupSetP2
-               (append (scopesSubst unifsT1Subst) (scopes f2))
-               (append (scopesTerm t0) (append (scopesTerm t1) (scopes f2))
+unify (Forall v f) = unify f
+unify (Exists v f) = unify f
+unify(Conj f1 f2) =
+  castLookupLeft (scopes f1) (scopes f2) (unify f1) ++ castLookupRight (scopes f1) (scopes f2) (unify f2)
+unify (Then (t0, t1) f2) =
+    let unifsT1 = unifyEq t0 t1
+        unifsT1Subst = lemmaFromListSubst (append (scopesTerm t0) (scopesTerm t1)) unifsT1
+     in (castLookupLeft (append (scopesTerm t0) (scopesTerm t1)) (scopes f2) unifsT1
+          ? lemmaAppendAssoc (scopesTerm t0) (scopesTerm t1) (scopes f2)
+        )
+        ++ lemmaLookupSetP2
+             (append (scopesSubst unifsT1Subst) (scopes f2))
+             (append (scopesTerm t0) (append (scopesTerm t1) (scopes f2))
+                ? lemmaScopesAppend (scopesSubst unifsT1Subst) (scopes f2)
+                ? lemmaScopesAppend (scopesTerm t0) (append (scopesTerm t1) (scopes f2))
+                ? lemmaScopesAppend (scopesTerm t1) (scopes f2)
+                ? lemmaScopesAppend (scopesTerm t0) (scopesTerm t1)
+                ? lemmaScopesSubst (append (scopesTerm t0) (scopesTerm t1)) unifsT1Subst
+             )
+             (lemmaLookupSetP2
+               (scopes (substituteSkolems unifsT1Subst f2))
+               (append (scopesSubst unifsT1Subst) (scopes f2)
                   ? lemmaScopesAppend (scopesSubst unifsT1Subst) (scopes f2)
-                  ? lemmaScopesAppend (scopesTerm t0) (append (scopesTerm t1) (scopes f2))
-                  ? lemmaScopesAppend (scopesTerm t1) (scopes f2)
-                  ? lemmaScopesAppend (scopesTerm t0) (scopesTerm t1)
-                  ? lemmaScopesSubst (append (scopesTerm t0) (scopesTerm t1)) unifsT1Subst
                )
-               (lemmaLookupSetP2
-                 (scopes (substituteSkolems unifsT1Subst f2))
-                 (append (scopesSubst unifsT1Subst) (scopes f2)
-                    ? lemmaScopesAppend (scopesSubst unifsT1Subst) (scopes f2)
-                 )
-                 (go (substituteSkolems unifsT1Subst f2))
-               )
-    go (Eq t0 t1) = unifyEq t0 t1
+               (unify (substituteSkolems unifsT1Subst f2))
+             )
+unify (Eq t0 t1) = unifyEq t0 t1
 
 {-@
 unifyEq
@@ -492,6 +487,7 @@ unifyEq
   -> t1:Term
   -> [{p:_ |
            isSubsetOfJust (freeVars (snd p)) (lookup (fst p) (scopesTerm t0 ++ scopesTerm t1))
+        && not (Set.member (fst p) (skolemSet (snd p)))
         && isSubsetOf (Set.listElts (scopesTerm (snd p))) (Set.listElts (scopesTerm t0 ++ scopesTerm t1))
       }]
 @-}
