@@ -136,12 +136,12 @@ substitute :: Set Int -> Subst Exp -> Exp -> Exp
 substitute scope s = \case
     Var i -> case lookupSubst i s of
       Nothing -> Var i
-      Just e -> e ? lemma_freeVarsSubst_sing i (asAssoc s)
+      Just e -> e ? lemmaFreeVarsSubstSing i (asAssoc s)
     App e0 e1 ->
       App
         (substitute scope s e0)
         (substitute scope s e1)
-      ? lemma_freeVarsSubst_union (freeVars e0) (freeVars e1) (asAssoc s)
+      ? lemmaFreeVarsSubstUnion (freeVars e0) (freeVars e1) (asAssoc s)
     Lam i e
       | member i scope ->
           let j = freshVar scope
@@ -150,7 +150,7 @@ substitute scope s = \case
                   (insert j scope)
                   (extendSubst s i (Var j))
                   e
-                ? lemma_freeVarsSubst_extend scope (freeVars e) i (Var j) (asAssoc s)
+                ? lemmaFreeVarsSubstExtend scope (freeVars e) i (Var j) (asAssoc s)
       | otherwise ->
           Lam i $
             substitute
@@ -159,116 +159,66 @@ substitute scope s = \case
               -- whatever it was in f
               (extendSubst s i (Var i))
               e
-            ? lemma_freeVarsSubst_extend scope (freeVars e) i (Var i) (asAssoc s)
+            ? lemmaFreeVarsSubstExtend scope (freeVars e) i (Var i) (asAssoc s)
 
 ----------
 -- Lemmas
 ----------
 
 {-@
-lemma_freeVarsSubst_empty
+lemmaFreeVarsSubstEmpty
   :: used:_
   -> {s:_ | Data.Set.null (intersection used (domain s))}
   -> { freeVarsSubst used s == empty }
 @-}
-lemma_freeVarsSubst_empty :: Set Int -> Assoc Exp -> ()
-lemma_freeVarsSubst_empty used [] = ()
-lemma_freeVarsSubst_empty used (_ : s) = lemma_freeVarsSubst_empty used s
+lemmaFreeVarsSubstEmpty :: Set Int -> Assoc Exp -> ()
+lemmaFreeVarsSubstEmpty used [] = ()
+lemmaFreeVarsSubstEmpty used (_ : s) = lemmaFreeVarsSubstEmpty used s
 
 {-@
-lemma_freeVarsSubst_empty_long
-  :: used:_
-  -> {s:_ | Data.Set.null (intersection used (domain s))}
-  -> { freeVarsSubst used s == empty }
-@-}
-lemma_freeVarsSubst_empty_long :: Set Int -> Assoc Exp -> ()
-lemma_freeVarsSubst_empty_long used [] = ()
-lemma_freeVarsSubst_empty_long used ((i, e) : s) =
-        freeVarsSubst used ((i, e) : s)
-    === -- unfold freeVarsSubst
-        ( if member i used then
-            union
-              (freeVars e)
-              (freeVarsSubst (difference used (singleton i)) s)
-          else
-            freeVarsSubst used s
-        )
-    === -- hypothesis: not (member i used)
-        freeVarsSubst used s ? lemma_freeVarsSubst_empty_long used s
-    === -- inductive hypothesis
-        empty
-    ***
-        QED
-
-
-{-
-lemma_freeVarsSubst_sing :: Int -> Assoc Exp -> ()
-lemma_freeVarsSubst_sing _ [] = ()
-lemma_freeVarsSubst_sing i ((j, _) : s)
-    | i == j =
-      lemma_freeVarsSubst_empty empty s
-    | otherwise =
-      lemma_freeVarsSubst_sing i s ? lemma_freeVarsSubst_empty empty s
--}
-
-{-@
-lemma_freeVarsSubst_sing
+lemmaFreeVarsSubstSing
   :: i:_
   -> s:_
   -> { freeVarsSubst (singleton i) s == freeVarsMaybe (lookupAssoc i s) }
 @-}
-lemma_freeVarsSubst_sing :: Int -> Assoc Exp -> ()
-lemma_freeVarsSubst_sing _ [] = ()
-lemma_freeVarsSubst_sing i ((j, e) : s) | i == j =
-        freeVarsSubst (singleton i) ((j, e) : s)
-    ==. -- unfold freeVarsSubst
-        union
-          (freeVars e)
-          (freeVarsSubst (difference (singleton i) (singleton j)) s)
-    ==. -- evaluate difference
-        union
-          (freeVars e)
-          (empty ? lemma_freeVarsSubst_empty empty s)
-    ==. -- set simplification
-        freeVars e
-    ==. -- unfold lookupAssoc and freeVarsMaybe
-        freeVarsMaybe (lookupAssoc i ((j, e) : s))
-    ***
-        QED
-lemma_freeVarsSubst_sing i ((j, e) : s) | otherwise =
-    lemma_freeVarsSubst_sing i s ? lemma_freeVarsSubst_empty empty s
-
+lemmaFreeVarsSubstSing :: Int -> Assoc Exp -> ()
+lemmaFreeVarsSubstSing _ [] = ()
+lemmaFreeVarsSubstSing i ((j, _) : s)
+    | i == j =
+      lemmaFreeVarsSubstEmpty empty s
+    | otherwise =
+      lemmaFreeVarsSubstSing i s ? lemmaFreeVarsSubstEmpty empty s
 
 {-@
-lemma_freeVarsSubst_union
+lemmaFreeVarsSubstUnion
   :: s1:_
   -> s2:_
   -> s:_
   -> { freeVarsSubst (union s1 s2) s
        == union (freeVarsSubst s1 s) (freeVarsSubst s2 s) }
 @-}
-lemma_freeVarsSubst_union :: Set Int -> Set Int -> Assoc Exp -> ()
-lemma_freeVarsSubst_union _ _ [] = ()
-lemma_freeVarsSubst_union s1 s2 ((i, _) : s) =
-    lemma_freeVarsSubst_union
+lemmaFreeVarsSubstUnion :: Set Int -> Set Int -> Assoc Exp -> ()
+lemmaFreeVarsSubstUnion _ _ [] = ()
+lemmaFreeVarsSubstUnion s1 s2 ((i, _) : s) =
+    lemmaFreeVarsSubstUnion
       (difference s1 (singleton i))
       (difference s2 (singleton i))
       s
 
 {-@
-lemma_freeVarsSubst_scoped
+lemmaFreeVarsSubstScoped
   :: scope:_
   -> used:_
   -> s:Assoc (ScopedExp scope)
   -> { isSubsetOf (freeVarsSubst used s) scope }
 @-}
-lemma_freeVarsSubst_scoped :: Set Int -> Set Int -> Assoc Exp -> ()
-lemma_freeVarsSubst_scoped _ _ [] = ()
-lemma_freeVarsSubst_scoped scope used ((i, _) : s) =
-    lemma_freeVarsSubst_scoped scope (difference used (singleton i)) s
+lemmaFreeVarsSubstScoped :: Set Int -> Set Int -> Assoc Exp -> ()
+lemmaFreeVarsSubstScoped _ _ [] = ()
+lemmaFreeVarsSubstScoped scope used ((i, _) : s) =
+    lemmaFreeVarsSubstScoped scope (difference used (singleton i)) s
 
 {-@
-lemma_freeVarsSubst_extend
+lemmaFreeVarsSubstExtend
   :: scope:_
   -> used:_
   -> i:_
@@ -278,7 +228,7 @@ lemma_freeVarsSubst_extend
        difference (freeVarsSubst used (extendAssoc s i e)) (freeVars e)
      }
 @-}
-lemma_freeVarsSubst_extend :: Set Int -> Set Int -> Int -> Exp -> Assoc Exp -> ()
-lemma_freeVarsSubst_extend scope used i _ s =
-    lemma_freeVarsSubst_scoped scope (difference used (singleton i)) s
+lemmaFreeVarsSubstExtend :: Set Int -> Set Int -> Int -> Exp -> Assoc Exp -> ()
+lemmaFreeVarsSubstExtend scope used i _ s =
+    lemmaFreeVarsSubstScoped scope (difference used (singleton i)) s
 

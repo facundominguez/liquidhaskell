@@ -1,6 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-@ LIQUID "--reflection" @-}
-module Subst4 where
+module Subst1 where
 
 import Data.Maybe
 import Data.Set
