@@ -128,6 +128,18 @@ wiredTheorySortedSyms =
       , "FF_mul"
 
       , "strLen"
+      , "None"
+      , "Some"
+      , "someVal"
+      , "isNone"
+      , "isSome"
+      , "IntMapSetInt_union"
+      , "IntMapSetInt_difference"
+      , "IntMapSetInt_isSubsetOf"
+      , "IntMapSetInt_select"
+      , "IntMapSetInt_store"
+      , "IntMapSetInt_default"
+      , "IntMapSetInt_keys"
       ]
 
 --------------------------------------------------------------------------------
