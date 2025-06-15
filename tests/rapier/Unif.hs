@@ -140,7 +140,10 @@ lemmaComposeSubstDomain _ _ = ()
 
 -- For each skolem, indicate what are the variables that
 -- are allowed in its solutions.
-{-@ reflect scopes @-}
+-- BUG: reflecting scopes instead of using  measure causes LH to drop some
+-- hipothesis when checking skolemize.
+--
+{-@ measure scopes @-}
 scopes :: Formula -> IntMap (Set Int)
 scopes (Forall _ f) = scopes f
 scopes (Exists _ f) = scopes f
@@ -330,22 +333,24 @@ scopesSubst (Subst xs) = foldr IntMap.union IntMap.empty $ map (scopesTerm . snd
 -- Every time that `SA (i,s)` occurs, the domain of `s` is exactly the set of
 -- bound variables in scope.
 {-@
+// bug: LH hangs when trying to check the Exists case of skolemize
 ignore skolemize
 skolemize
   :: sf:_
   -> {f:ScopedFormula sf | consistentSkolemScopes f}
   -> State
        < {\se ->
-             isSubsetOf (freeVarsFormula f) se
-          && isSubsetOf sf se
+             isSubsetOf sf se
           && isSubsetOf (IntMapSetInt_keys (scopes f)) se
          }
 
        , {\se0 v se ->
              consistentSkolemScopes v
           && existsCount v = 0
-          && isSubsetOf (freeVarsFormula v) se
+          && isSubsetOf (freeVarsFormula v) sf
           && isSubsetOf se0 se
+          && intersection se0 (IntMapSetInt_keys (IntMap.difference (scopes v) (scopes f))) = Set.empty
+          && intMapIsSubsetOf (scopes f) (scopes v)
           && isSubsetOf (IntMapSetInt_keys (scopes v)) se
        }>
        _ _
