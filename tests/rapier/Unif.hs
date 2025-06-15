@@ -333,8 +333,6 @@ scopesSubst (Subst xs) = foldr IntMap.union IntMap.empty $ map (scopesTerm . snd
 -- Every time that `SA (i,s)` occurs, the domain of `s` is exactly the set of
 -- bound variables in scope.
 {-@
-// bug: LH hangs when trying to check the Exists case of skolemize
-ignore skolemize
 skolemize
   :: sf:_
   -> {f:ScopedFormula sf | consistentSkolemScopes f}
@@ -362,13 +360,7 @@ skolemize sf (Forall v f) = do
     put (Set.insert v se)
     f' <- skolemize (Set.insert v sf) f
     pure (Forall v f')
-skolemize sf (Exists v f) = do
-    se <- get
-    let u = if Set.member v se then freshVar se else v
-        se' = Set.insert u se
-        subst = fromListSubst [(v, SA (u, fromSetIdSubst sf))]
-    put se'
-    skolemize sf (substituteFormula sf subst f)
+skolemize sf (Exists v f) = skolemizeExistsCase sf v f
 skolemize sf (Conj f1 f2) = do
      f1' <- skolemize sf f1
      f2' <- skolemize sf f2
@@ -377,6 +369,39 @@ skolemize sf (Then (t0, t1) f2) = do
      f2' <- skolemize sf f2
      pure (Then (t0, t1) f2')
 skolemize _ f@Eq{} = pure f
+
+{-@
+// bug: LH hangs when trying to check the Exists case of skolemize
+ignore skolemizeExistsCase
+skolemizeExistsCase
+  :: sf:_
+  -> Int
+  -> {f:ScopedFormula sf | consistentSkolemScopes f}
+  -> State
+       < {\se ->
+             isSubsetOf sf se
+          && isSubsetOf (IntMapSetInt_keys (scopes f)) se
+         }
+
+       , {\se0 v se ->
+             consistentSkolemScopes v
+          && existsCount v = 0
+          && isSubsetOf (freeVarsFormula v) sf
+          && isSubsetOf se0 se
+          && intersection se0 (IntMapSetInt_keys (IntMap.difference (scopes v) (scopes f))) = Set.empty
+          && intMapIsSubsetOf (scopes f) (scopes v)
+          && isSubsetOf (IntMapSetInt_keys (scopes v)) se
+       }>
+       _ _
+     / [formulaSize f]
+@-}
+skolemizeExistsCase :: Set Int -> Int -> Formula -> State (Set Int) Formula
+skolemizeExistsCase sf v f = do
+    se <- get
+    let u = if Set.member v se then freshVar se else v
+    put (Set.insert u se)
+    let subst = fromListSubst [(v, SA (u, fromSetIdSubst sf))]
+    skolemize sf (substituteFormula sf subst f)
 
 {-@ measure existsCount @-}
 {-@ existsCount :: Formula -> Nat @-}
