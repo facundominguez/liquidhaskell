@@ -1,6 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-@ LIQUID "--ple" @-}
-{-@ LIQUID "--exactdc" @-}
+{-@ LIQUID "--reflect" @-}
 {-@ LIQUID "--short-names" @-}
 {-@ LIQUID "--no-pattern-inline" @-}
 module Unif where
@@ -613,6 +613,19 @@ unifyFormula = unifyFormula' False
 {-@ ignore unifyFormulaTrace @-}
 unifyFormulaTrace :: Formula -> [(Var, Term)]
 unifyFormulaTrace = unifyFormula' True
+
+{-@
+unifyFormulaChecked
+  :: sf:_
+  -> se:_
+  -> {f:ScopedFormula sf |
+       consistentSkolemScopes f && isSubsetOf (IntMapSetInt_keys (scopes f)) se}
+  -> [(Var, Term)]
+@-}
+unifyFormulaChecked :: Set Int -> Set Int -> Formula -> [(Var, Term)]
+unifyFormulaChecked sf se f =
+    let (f', _ ) = runState (skolemize sf f) (Set.union sf se)
+     in unify sf f'
 
 {-@ ignore unifyFormula' @-}
 unifyFormula' :: Bool -> Formula -> [(Var, Term)]
