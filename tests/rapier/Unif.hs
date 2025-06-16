@@ -606,26 +606,24 @@ isVar _ = False
 
 --- | Assign terms to existential variables in an attempt to make a formula
 -- true.
-{-@ ignore unifyFormula @-}
-unifyFormula :: Formula -> [(Var, Term)]
-unifyFormula = unifyFormula' False
-
-{-@ ignore unifyFormulaTrace @-}
-unifyFormulaTrace :: Formula -> [(Var, Term)]
-unifyFormulaTrace = unifyFormula' True
-
 {-@
-unifyFormulaChecked
+unifyFormula
   :: sf:_
   -> se:_
   -> {f:ScopedFormula sf |
        consistentSkolemScopes f && isSubsetOf (IntMapSetInt_keys (scopes f)) se}
   -> [(Var, Term)]
 @-}
-unifyFormulaChecked :: Set Int -> Set Int -> Formula -> [(Var, Term)]
-unifyFormulaChecked sf se f =
+unifyFormula :: Set Int -> Set Int -> Formula -> [(Var, Term)]
+unifyFormula sf se f =
     let (f', _ ) = runState (skolemize sf f) (Set.union sf se)
      in unify sf f'
+
+
+
+{-@ ignore unifyFormulaTrace @-}
+unifyFormulaTrace :: Formula -> [(Var, Term)]
+unifyFormulaTrace = unifyFormula' True
 
 {-@ ignore unifyFormula' @-}
 unifyFormula' :: Bool -> Formula -> [(Var, Term)]
@@ -755,8 +753,12 @@ test = do
         ]
   mapM_ runUnificationTest tests
   where
+    runUnificationTest :: (String, (Formula, [(Var, Term)])) -> IO ()
     runUnificationTest (name, (f, expected)) = do
-      let result = unifyFormula f
+      let result = unifyFormula
+            (freeVarsFormula f)
+            (Set.fromList $ IntMap.keys (scopes f))
+            f
       if result == expected
         then putStrLn $ concat ["Test ", name, ": Passed"]
         else putStrLn $
