@@ -17,7 +17,7 @@ import Data.Set qualified as Set
 import Debug.Trace qualified
 import qualified Data.Maybe as GHC.Internal.Maybe
 import Language.Haskell.Liquid.ProofCombinators
-import RIO2
+import State
 
 -- We start with a preamble of definitions to introduce the interpretation of
 -- the IntMap type as an array. Any @IntMap a b@ in this file is interpreted as

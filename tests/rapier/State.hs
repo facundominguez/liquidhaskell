@@ -1,6 +1,13 @@
 {-# OPTIONS_GHC -Wno-noncanonical-monad-instances #-}
 {-@ LIQUID "--no-pattern-inline" @-}
-module RIO2 where
+
+-- | This module defines a state monad with refined types. It is used in
+-- the Unif.hs example.
+-- The code has been copied and adapted from the Liquid Haskell repository:
+--
+-- https://github.com/ucsd-progsys/liquidhaskell/blob/a826d422730eee153a2818e68f392f770fbc5cab/tests/benchmarks/icfp15/pos/RIO2.hs
+--
+module State where
 
 import Data.Set as Set
 
