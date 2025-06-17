@@ -2,6 +2,7 @@
 {-@ LIQUID "--ple" @-}
 {-@ LIQUID "--reflect" @-}
 {-@ LIQUID "--short-names" @-}
+{-@ LIQUID "--prune-unsorted" @-}
 {-@ LIQUID "--no-pattern-inline" @-}
 module Unif where
 
@@ -251,7 +252,14 @@ formulaSize (Then _ f2) = 1 + formulaSize f2
 formulaSize (Eq t0 t1) = 1
 
 
-{-@ reflect substitute @-}
+-- BUG: assumed specs are ignored when the function is reflected
+{-@
+reflect substitute
+assume substitute
+  :: Subst {st:Term | consistentSkolemScopesTerm st}
+  -> {t:Term | consistentSkolemScopesTerm t}
+  -> {v:Term | consistentSkolemScopesTerm v}
+@-}
 substitute :: Subst Term -> Term -> Term
 substitute s t = case t of
     V v -> case lookupSubst v s of
@@ -262,8 +270,19 @@ substitute s t = case t of
     L t1 -> L (substitute s t1)
     P t1 t2 -> P (substitute s t1) (substitute s t2)
 
-{-@ lazy composeSubst @-}
-{-@ opaque-reflect composeSubst @-}
+{-@
+assume lemmaSubstituteConsistentScopes
+  :: s:Subst {st:Term | consistentSkolemScopesTerm st}
+  -> {t:Term | consistentSkolemScopesTerm t}
+  -> { consistentSkolemScopesTerm (substitute s t) }
+@-}
+lemmaSubstituteConsistentScopes :: Subst Term -> Term -> ()
+lemmaSubstituteConsistentScopes _ _ = ()
+
+{-@
+ignore composeSubst
+opaque-reflect composeSubst
+@-}
 composeSubst :: Subst Term -> Subst Term -> Subst Term
 composeSubst (Subst xs) s = Subst (map (fmap (substitute s)) xs)
 
@@ -371,7 +390,7 @@ skolemize sf (Then (t0, t1) f2) = do
 skolemize _ f@Eq{} = pure f
 
 {-@
-// bug: LH hangs when trying to check the Exists case of skolemize
+// BUG: LH hangs when trying to check the Exists case of skolemize
 ignore skolemizeExistsCase
 skolemizeExistsCase
   :: sf:_
@@ -425,15 +444,18 @@ existsCount Eq{} = 0
 unify
   :: s:Set Int
   -> {f:ScopedFormula s | consistentSkolemScopes f && existsCount f = 0}
-  -> [{p:_ |
+  -> Maybe [{p:_ |
            isSubsetOfJust (freeVars (snd p)) (IntMap.lookup (fst p) (scopes f))
         && not (Set.member (fst p) (skolemSet (snd p)))
       }] / [formulaSize f]
 @-}
-unify :: Set Int -> Formula -> [(Var, Term)]
+unify :: Set Int -> Formula -> Maybe [(Var, Term)]
 unify s (Forall v f) = unify (Set.insert v s) f
 unify s (Exists v f) = error "unify: the formula hasn't been skolemized"
-unify s (Conj f1 f2) = unify s f1 ++ unify s f2
+unify s (Conj f1 f2) = do
+    unifyF1 <- unify s f1
+    unifyF2 <- unify s (substituteSkolems (fromListSubst unifyF1) f2)
+    return (unifyF1 ++ unifyF2)
 unify s f@(Then (t0, t1) f2) =
     let subst = fromListSubst (substEq t0 t1)
      in unify s (substituteFormula s subst (f2 ? lemmaSubst subst))
@@ -461,30 +483,40 @@ substEq SA{} _ = []
 substEq _ SA{} = []
 substEq _ _ = []
 
+-- BUG: ignoring a function causes the asserted signature to be ignored
+-- It needs to be assumed to work around it.
 {-@
+lazy unifyEq
 unifyEq
   :: {t0:Term | consistentSkolemScopesTerm t0}
   -> {t1:Term |
           UnionCommutes (scopesTerm t0) (scopesTerm t1)
        && consistentSkolemScopesTerm t1
      }
-  -> [{p:( Var
+  -> Maybe [{p:( Var
          , {t:Term |
-              intMapIsSubsetOf
-                (scopesTerm t)
-                (IntMap.union (scopesTerm t0) (scopesTerm t1))
+                intMapIsSubsetOf
+                  (scopesTerm t)
+                  (IntMap.union (scopesTerm t0) (scopesTerm t1))
+              && consistentSkolemScopesTerm t
            }
          ) |
            isSubsetOfJust (freeVars (snd p)) (IntMap.lookup (fst p) (IntMap.union (scopesTerm t0) (scopesTerm t1)))
         && not (Set.member (fst p) (skolemSet (snd p)))
       }]
 @-}
-unifyEq :: Term -> Term -> [(Var, Term)]
+unifyEq :: Term -> Term -> Maybe [(Var, Term)]
 unifyEq t0@(SA (i, s)) t1 = unifyEqEnd t0 t1
 unifyEq t0 t1@(SA (i, s)) = unifyEqEnd t1 t0
 unifyEq (L t0) (L t1) = unifyEq t0 t1
-unifyEq (P t0a t0b) (P t1a t1b) = unifyEq t0a t1a ++ unifyEq t0b t1b
-unifyEq _ _ = []
+unifyEq (P t0a t0b) (P t1a t1b) = do
+    unifyT0a <- unifyEq t0a t1a
+    let substT0a = fromListSubst unifyT0a
+    unifyT0b <- unifyEq (substituteSkolemsTerm substT0a t0b)
+                        (substituteSkolemsTerm substT0a t1b)
+    return $ unifyT0a ++ unifyT0b
+unifyEq U U = Just []
+unifyEq _ _ = Nothing
 
 -- BUG: cannot define a termination metric if conflating unifyEq and unifyEqEnd
 {-@
@@ -494,27 +526,79 @@ unifyEqEnd
           UnionCommutes (scopesTerm t0) (scopesTerm t1)
        && consistentSkolemScopesTerm t1
      }
-  -> [{p:( Var
+  -> Maybe [{p:( Var
          , {t:Term |
-              intMapIsSubsetOf
-                (scopesTerm t)
-                (IntMap.union (scopesTerm t0) (scopesTerm t1))
+                intMapIsSubsetOf
+                  (scopesTerm t)
+                  (IntMap.union (scopesTerm t0) (scopesTerm t1))
+             && consistentSkolemScopesTerm t
            }
          ) |
            isSubsetOfJust (freeVars (snd p)) (IntMap.lookup (fst p) (IntMap.union (scopesTerm t0) (scopesTerm t1)))
         && not (Set.member (fst p) (skolemSet (snd p)))
       }]
 @-}
-unifyEqEnd :: Term -> Term -> [(Var, Term)]
+unifyEqEnd :: Term -> Term -> Maybe [(Var, Term)]
 unifyEqEnd t0@(SA (i, s)) t1
     | Just s' <- inverseSubst $ narrowForInvertibility (freeVars t1) s
     , let t' = substitute s' t1
     , not (Set.member i (skolemSet t'))
     , Set.isSubsetOf (freeVars t') (domain s)
-    =
-      [(i, t')]
+    = Just [(i, t')]
         ? lemmaSubstituteScopesTerm s' t1
-unifyEqEnd _ _ = []
+        ? lemmaSubstituteConsistentScopes s' t1
+unifyEqEnd _ _ = Nothing
+
+
+{-@
+assume substituteSkolems
+  :: s:Subst Term
+  -> {f:Formula | consistentSkolemScopes f && existsCount f = 0}
+  -> {v:Formula |
+          formulaSize f == formulaSize v
+       && intMapIsSubsetOf (scopes v) (scopes f)
+       && consistentSkolemScopes v
+       && existsCount v = 0
+       && isSubsetOf (freeVarsFormula v) (freeVarsFormula f)
+     }
+ignore substituteSkolems
+@-}
+substituteSkolems :: Subst Term -> Formula -> Formula
+substituteSkolems s = \case
+    Forall v f ->
+        let s' = extendSubst s v (V v)
+            f' = substituteSkolems s' f
+         in
+            Forall v f'
+    Exists v f -> error "substituteSkolems: the formula hasn't been skolemized"
+    Conj f1 f2 -> Conj (substituteSkolems s f1) (substituteSkolems s f2)
+    Then (t0, t1) f2 ->
+      Then (substituteSkolemsTerm s t0, substituteSkolemsTerm s t1) (substituteSkolems s f2)
+    Eq t0 t1 -> Eq (substituteSkolemsTerm s t0) (substituteSkolemsTerm s t1)
+
+{-@
+ignore substituteSkolemsTerm
+assume substituteSkolemsTerm
+  :: Subst {st:Term | consistentSkolemScopesTerm st}
+  -> {t:Term | consistentSkolemScopesTerm t}
+  -> {v:Term |
+          intMapIsSubsetOf (scopesTerm v) (scopesTerm t)
+       && consistentSkolemScopesTerm v
+     }
+@-}
+substituteSkolemsTerm :: Subst Term -> Term -> Term
+substituteSkolemsTerm s t = case t of
+    V v -> V v
+    SA (v, s1) -> case lookupSubst v s of
+      Just t1 -> substituteSkolemsTerm s1 t1
+      Nothing -> SA (v, composeSubst s1 s)
+    U -> U
+    L t1 -> L (substituteSkolemsTerm s t1)
+    P t1 t2 -> P (substituteSkolemsTerm s t1) (substituteSkolemsTerm s t2)
+  where
+    {-@ ignore composeSubst @-}
+    composeSubst :: Subst Term -> Subst Term -> Subst Term
+    composeSubst (Subst xs) s = Subst (map (fmap (substituteSkolemsTerm s)) xs)
 
 
 {-@ predicate UnionCommutes S0 S1 = IntMap.union S0 S1 == IntMap.union S1 S0 @-}
@@ -587,11 +671,14 @@ narrowForInvertibility vs (Subst xs) = Subst [(i, V j) | (i, V j) <- xs, Set.mem
 --
 -- At the moment we just pick the first of the variables with a duplicated
 -- range.
-{-@ inverseSubst :: _ -> Maybe (Subst {t:_ | isVar t}) @-}
+{-@
+inverseSubst
+  :: _ -> Maybe (Subst {t:_ | isVar t && consistentSkolemScopesTerm t})
+@-}
 inverseSubst :: Subst Term -> Maybe (Subst Term)
 inverseSubst (Subst xs) = Subst <$> go xs
   where
-    {-@ go :: _ -> Maybe [(Var, {t:_ | isVar t})] @-}
+    {-@ go :: _ -> Maybe [(Var, {t:_ | isVar t && consistentSkolemScopesTerm t})] @-}
     go :: [(Var, Term)] -> Maybe [(Var, Term)]
     go [] = Just []
     go ((i, V j) : xs) = ((j, V i) :) <$> go xs
@@ -612,21 +699,20 @@ unifyFormula
   -> se:_
   -> {f:ScopedFormula sf |
        consistentSkolemScopes f && isSubsetOf (IntMapSetInt_keys (scopes f)) se}
-  -> [(Var, Term)]
+  -> Maybe [(Var, Term)]
 @-}
-unifyFormula :: Set Int -> Set Int -> Formula -> [(Var, Term)]
+unifyFormula :: Set Int -> Set Int -> Formula -> Maybe [(Var, Term)]
 unifyFormula sf se f =
     let (f', _ ) = runState (skolemize sf f) (Set.union sf se)
      in unify sf f'
 
 
-
 {-@ ignore unifyFormulaTrace @-}
-unifyFormulaTrace :: Formula -> [(Var, Term)]
+unifyFormulaTrace :: Formula -> Maybe [(Var, Term)]
 unifyFormulaTrace = unifyFormula' True
 
 {-@ ignore unifyFormula' @-}
-unifyFormula' :: Bool -> Formula -> [(Var, Term)]
+unifyFormula' :: Bool -> Formula -> Maybe [(Var, Term)]
 unifyFormula' mustTrace =
     traceUnify
           "                     unify" .
@@ -639,12 +725,13 @@ unifyFormula' mustTrace =
     trace label f
       | mustTrace = Debug.Trace.trace (label ++ ": " ++ ppFormula prettyName f) f
       | otherwise = f
-    traceUnify :: String -> [(Var, Term)] -> [(Var, Term)]
+    traceUnify :: String -> Maybe [(Var, Term)] -> Maybe [(Var, Term)]
     traceUnify label xs
       | mustTrace = Debug.Trace.trace (label ++ ": " ++ showUnification xs) xs
       | otherwise = xs
-    showUnification :: [(Var, Term)] -> String
-    showUnification xs =
+    showUnification :: Maybe [(Var, Term)] -> String
+    showUnification Nothing = "Nothing"
+    showUnification (Just xs) =
       let xs' = map (\(i, t) -> (prettyName i, ppTerm prettyName t)) xs
        in "[" ++ List.intercalate ", " (map (\(i, t) -> i ++ ":=" ++ t) xs') ++ "]"
 
@@ -741,19 +828,19 @@ tf8 = Forall 0 $ Forall 1 $ Forall 2 $
 test :: IO ()
 test = do
   let tests =
-        [ ("tf0", (tf0, [(1,V 0)]))
-        , ("tf1", (tf1, [(1,V 0), (3,V 2)]))
-        , ("tf2", (tf2, [(1,V 0), (3,V 2)]))
-        , ("tf3", (tf3, [(0,V 1), (3,V 2)]))
-        , ("tf4", (tf4, [(2,V 1)]))
-        , ("tf5", (tf5, [(2,V 1)]))
-        , ("tf6", (tf6, [(1,V 0)]))
-        , ("tf7", (tf7, [(2,SA (1,Subst [(0,V 0)]))]))
-        , ("tf8", (tf8, [(3,P (SA (5,Subst [(0,P (P U U) U),(1,P U U),(2,U)])) (SA (6,Subst [(0,P (P U U) U),(1,P U U),(2,U)]))),(4,SA (5,Subst [(0,P (P U U) U),(1,P U U),(2,U)])),(6,U)]))
+        [ ("tf0", (tf0, Just [(1,V 0)]))
+        , ("tf1", (tf1, Just [(1,V 0), (3,V 2)]))
+        , ("tf2", (tf2, Just [(1,V 0), (3,V 2)]))
+        , ("tf3", (tf3, Just [(0,V 1), (3,V 2)]))
+        , ("tf4", (tf4, Just [(2,V 1)]))
+        , ("tf5", (tf5, Just [(2,V 1)]))
+        , ("tf6", (tf6, Just [(1,V 0)]))
+        , ("tf7", (tf7, Nothing))
+        , ("tf8", (tf8, Just [(3,P (SA (5,Subst [(0,P (P U U) U),(1,P U U),(2,U)])) (SA (6,Subst [(0,P (P U U) U),(1,P U U),(2,U)]))),(5,SA (4,Subst [(0,P (P U U) U),(1,P U U),(2,U)])),(6,U)]))
         ]
   mapM_ runUnificationTest tests
   where
-    runUnificationTest :: (String, (Formula, [(Var, Term)])) -> IO ()
+    runUnificationTest :: (String, (Formula, Maybe [(Var, Term)])) -> IO ()
     runUnificationTest (name, (f, expected)) = do
       let result = unifyFormula
             (freeVarsFormula f)
