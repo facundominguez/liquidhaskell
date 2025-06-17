@@ -6,18 +6,20 @@
 {-@ LIQUID "--no-pattern-inline" @-}
 module Unif where
 
-import Data.Foldable qualified as Foldable
 import Data.List qualified as List
-import Data.Map (Map)
-import Data.Map qualified as Map
 import Data.Maybe
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Debug.Trace qualified
+-- BUG: this import is to avoid a bug in name resolution in Liquid Haskell
 import qualified Data.Maybe as GHC.Internal.Maybe
+
+-- from liquid-prelude:
 import Language.Haskell.Liquid.ProofCombinators
+
+-- from a sibling source file:
 import State
 
 -- We start with a preamble of definitions to introduce the interpretation of
@@ -83,7 +85,7 @@ type SkolemApp = (Var, Subst Term)
 --------------------------------------
 
 data Subst t = Subst [(Var,t)]
-  deriving (Eq, Ord, Show, Functor, Foldable, Traversable)
+  deriving (Eq, Ord, Show)
 
 {-@
 assume lookupSubst
