@@ -98,10 +98,11 @@ emptySubst :: Subst e
 emptySubst = Subst []
 
 {-@
+opaque-reflect extendSubst
 assume extendSubst
-  :: s:Subst a
-  -> i:Int
-  -> a
+  :: s:_
+  -> i:_
+  -> t:_
   -> {v:_ | union (domain s) (singleton i) = domain v }
 @-}
 extendSubst :: Subst a -> Var -> a -> Subst a
@@ -119,6 +120,19 @@ assume fromSetIdSubst ::
 @-}
 fromSetIdSubst :: Set Int -> Subst Term
 fromSetIdSubst s = Subst [(i, V i) | i <- Set.toList s]
+
+{-@
+assume lemmaExtendSubstScopes
+  :: s:_
+  -> i:_
+  -> t:_
+  -> { scopesSubst (extendSubst s i t)
+         = IntMap.union (scopesSubst s) (scopesTerm t)
+     }
+@-}
+lemmaExtendSubstScopes
+  :: Subst Term -> Var -> Term -> ()
+lemmaExtendSubstScopes _ _ _ = ()
 
 {-@
 assume lemmaScopeSubstSubset
@@ -255,10 +269,6 @@ formulaSize (Eq t0 t1) = 1
 -- BUG: assumed specs are ignored when the function is reflected
 {-@
 reflect substitute
-assume substitute
-  :: Subst {st:Term | consistentSkolemScopesTerm st}
-  -> {t:Term | consistentSkolemScopesTerm t}
-  -> {v:Term | consistentSkolemScopesTerm v}
 @-}
 substitute :: Subst Term -> Term -> Term
 substitute s t = case t of
@@ -288,8 +298,7 @@ composeSubst (Subst xs) s = Subst (map (fmap (substitute s)) xs)
 
 {-@
 opaque-reflect substituteFormula
-ignore substituteFormula
-assume substituteFormula
+substituteFormula
   :: scope:Set Int
   -> s:Subst (ScopedTerm scope)
   -> {f:ScopedFormula (domain s) |
@@ -301,7 +310,7 @@ assume substituteFormula
        && consistentSkolemScopes v
        && existsCount v = existsCount f
        && intMapIsSubsetOf (scopes v) (IntMap.union (scopes f) (scopesSubst s))
-     }
+     } / [formulaSize f]
 @-}
 substituteFormula
   :: Set Int -> Subst Term -> Formula -> Formula
@@ -311,13 +320,13 @@ substituteFormula scope s = \case
         let u = freshVar scope
             scope' = Set.insert u scope
             s' = extendSubst s v (V u)
-            f' = substituteFormula scope' s' f
+            f' = substituteFormula scope' s' (f ? lemmaExtendSubstScopes s v (V u))
          in
             Forall u f'
       | otherwise ->
         let scope' = Set.insert v scope
             s' = extendSubst s v (V v)
-            f' = substituteFormula scope' s' f
+            f' = substituteFormula scope' s' (f ? lemmaExtendSubstScopes s v (V v))
          in
             Forall v f'
     Exists v f
@@ -325,19 +334,23 @@ substituteFormula scope s = \case
         let u = freshVar scope
             scope' = Set.insert u scope
             s' = extendSubst s v (V u)
-            f' = substituteFormula scope' s' f
+            f' = substituteFormula scope' s' (f ? lemmaExtendSubstScopes s v (V u))
          in
             Exists u f'
       | otherwise ->
         let scope' = Set.insert v scope
             s' = extendSubst s v (V v)
-            f' = substituteFormula scope' s' f
+            f' = substituteFormula scope' s' (f ? lemmaExtendSubstScopes s v (V v))
          in
             Exists v f'
     Conj f1 f2 -> Conj (substituteFormula scope s f1) (substituteFormula scope s f2)
     Then (t0, t1) f2 ->
       Then (substitute s t0, substitute s t1) (substituteFormula scope s f2)
+        ? lemmaSubstituteFreeVars scope s t0
+        ? lemmaSubstituteFreeVars scope s t1
     Eq t0 t1 -> Eq (substitute s t0) (substitute s t1)
+      ? lemmaSubstituteFreeVars scope s t0
+      ? lemmaSubstituteFreeVars scope s t1
 
 -- BUG: Appartently Liquid Haskell cannot prove termination of recursive
 -- functions on mutually recursive types, so we disable the termination checker
@@ -346,6 +359,21 @@ substituteFormula scope s = \case
 {-@ opaque-reflect scopesSubst @-}
 scopesSubst :: Subst Term -> IntMap (Set Int)
 scopesSubst (Subst xs) = foldr IntMap.union IntMap.empty $ map (scopesTerm . snd) xs
+
+{-@
+assume lemmaSubstituteFreeVars
+  :: scope:Set Int
+  -> s:Subst (ScopedTerm scope)
+  -> {t:ScopedTerm (domain s) | consistentSkolemScopesTerm t}
+  -> {   isSubsetOf (freeVars (substitute s t)) scope
+      && IntMapSetInt_isSubsetOf
+           (scopesTerm (substitute s t))
+           (IntMapSetInt_union (scopesTerm t) (scopesSubst s))
+      && consistentSkolemScopesTerm (substitute s t)
+     }
+@-}
+lemmaSubstituteFreeVars :: Set Int -> Subst Term -> Term -> ()
+lemmaSubstituteFreeVars scope s f = ()
 
 -- | Replaces existential variables with skolem functions
 --
