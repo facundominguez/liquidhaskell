@@ -145,12 +145,13 @@ lemmaScopesSubstSubset :: IntMap (Set Int) -> Subst Term -> ()
 lemmaScopesSubstSubset _ _ = ()
 
 {-@
-assume lemmaScopesListSubset
+lemmaScopesListSubset
   :: m0:_
   -> s:[(Var, {t:Term | intMapIsSubsetOf (scopesTerm t) m0})]
   -> { intMapIsSubsetOf (scopesList s) m0 } @-}
 lemmaScopesListSubset :: IntMap (Set Int) -> [(Var, Term)] -> ()
-lemmaScopesListSubset _ _ = ()
+lemmaScopesListSubset _ [] = ()
+lemmaScopesListSubset m0 ((_ , _) : xs) = lemmaScopesListSubset m0 xs
 
 {-@
 assume lemmaComposeSubstDomain
@@ -471,13 +472,11 @@ unify
 unify :: Set Int -> Formula -> Maybe [(Var, Term)]
 unify s (Forall v f) = unify (Set.insert v s) f
 unify s (Exists v f) = error "unify: the formula hasn't been skolemized"
-unify s (Conj f1 f2) = do
+unify s f@(Conj f1 f2) = do
     unifyF1 <- unify s f1
-    unifyF2 <- unify s (substituteSkolems (f2 ? lemmaSubst unifyF1) unifyF1)
+    let lemmaSubst = lemmaScopesListSubset (scopes f) unifyF1
+    unifyF2 <- unify s (substituteSkolems (f2 ? lemmaSubst) unifyF1)
     return (unifyF1 ++ unifyF2)
-  where
-    lemmaSubst subst =
-      lemmaScopesListSubset (intMapUnion (scopes f1) (scopes f2)) subst
 unify s f@(Then (t0, t1) f2) =
     let subst = fromListSubst (substEq t0 t1)
      in unify s (substituteFormula s subst (f2 ? lemmaSubst subst))
@@ -634,12 +633,10 @@ composeSubstList (Subst xs) s = Subst (map (fmap (`substituteSkolemsTerm` s)) xs
 skip :: () -> ()
 skip () = ()
 
-{-@
-opaque-reflect scopesList
-ignore scopesList
-@-}
+{-@ reflect scopesList @-}
 scopesList :: [(Var, Term)] -> IntMap (Set Int)
-scopesList = IntMap.unions . map (scopesTerm . snd)
+scopesList [] = IntMap.empty
+scopesList ((_, t) : xs) = IntMap.union (scopesTerm t) (scopesList xs)
 
 {-@ inline isSubsetOfJustOrNothing @-}
 isSubsetOfJustOrNothing :: Set Int -> Maybe (Set Int) -> Bool
