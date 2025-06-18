@@ -290,10 +290,13 @@ substitute s t = case t of
     L t1 -> L (substitute s t1)
     P t1 t2 -> P (substitute s t1) (substitute s t2)
 
+-- This lemma should be possible to generalize by dropping the @isVar@
+-- requirement and asking @UnionCommutes (scopesTerm t) (scopesSubst s)@
+-- instead.
 {-@
 assume lemmaSubstituteConsistentScopes
-  :: s:Subst {st:Term | consistentSkolemScopesTerm st}
-  -> {t:Term | consistentSkolemScopesTerm t}
+  :: s:Subst {st:Term | consistentSkolemScopesTerm st && isVar st}
+  -> {t:Term | consistentSkolemScopesTerm t }
   -> { consistentSkolemScopesTerm (substitute s t) }
 @-}
 lemmaSubstituteConsistentScopes :: Subst Term -> Term -> ()
