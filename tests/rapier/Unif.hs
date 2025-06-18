@@ -533,10 +533,11 @@ unifyEq t0 t1@(SA (i, s)) = unifyEqEnd t1 t0
 unifyEq (L t0) (L t1) = unifyEq t0 t1
 unifyEq (P t0a t0b) (P t1a t1b) = do
     unifyT0a <- unifyEq t0a t1a
-    unifyT0b <- unifyEq (substituteSkolemsTerm t0b (unifyT0a ?
-                   lemmaScopesListSubset (intMapUnion (scopesTerm t0a) (scopesTerm t1a)) unifyT0a))
-                        (substituteSkolemsTerm t1b (unifyT0a ?
-                   lemmaScopesListSubset (intMapUnion (scopesTerm t0a) (scopesTerm t1a)) unifyT0a))
+    -- BUG: the lemma does not seem to work if moved to a where clause
+    let lemmaSubst = lemmaScopesListSubset
+          (intMapUnion (scopesTerm t0a) (scopesTerm t1a)) unifyT0a
+    unifyT0b <- unifyEq (substituteSkolemsTerm t0b (unifyT0a ? lemmaSubst))
+                        (substituteSkolemsTerm t1b (unifyT0a ? lemmaSubst))
     return $ unifyT0a ++ unifyT0b
 unifyEq U U = Just []
 unifyEq _ _ = Nothing
