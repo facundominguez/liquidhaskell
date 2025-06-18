@@ -557,9 +557,6 @@ unifyEq (P t0a t0b) (P t1a t1b) = do
                         (substituteSkolemsTerm t1b (unifyT0a ?
                    lemmaScopesListSubset (intMapUnion (scopesTerm t0a) (scopesTerm t1a)) unifyT0a))
     return $ unifyT0a ++ unifyT0b
-  where
-    lemmaSubst subst =
-      lemmaScopesListSubset (intMapUnion (scopesTerm t0a) (scopesTerm t1a)) subst
 unifyEq U U = Just []
 unifyEq _ _ = Nothing
 
@@ -596,7 +593,7 @@ unifyEqEnd _ _ = Nothing
 
 
 {-@
-assume substituteSkolems
+substituteSkolems
   :: {f:Formula | consistentSkolemScopes f && existsCount f = 0}
   -> {s:[{p:(Var, {st:Term | consistentSkolemScopesTerm st}) |
            isSubsetOfJustOrNothing (freeVars (snd p)) (IntMap.lookup (fst p) (scopes f))
@@ -608,48 +605,52 @@ assume substituteSkolems
        && intMapIsSubsetOf (scopes v) (scopes f)
        && consistentSkolemScopes v
        && existsCount v = 0
-       && isSubsetOf (freeVarsFormula v) (freeVarsFormula f)
+       && freeVarsFormula v = freeVarsFormula f
      }
-ignore substituteSkolems
 @-}
 substituteSkolems :: Formula -> [(Var, Term)] -> Formula
 substituteSkolems f0 s = case f0 of
     Forall v f -> Forall v (substituteSkolems f s)
     Exists v f -> error "substituteSkolems: the formula hasn't been skolemized"
-    Conj f1 f2 -> Conj (substituteSkolems f2 s) (substituteSkolems f2 s)
+    Conj f1 f2 -> Conj (substituteSkolems f1 s) (substituteSkolems f2 s)
     Then (t0, t1) f2 ->
       Then (substituteSkolemsTerm t0 s, substituteSkolemsTerm t1 s)
            (substituteSkolems f2 s)
     Eq t0 t1 -> Eq (substituteSkolemsTerm t0 s) (substituteSkolemsTerm t1 s)
 
 {-@
-ignore substituteSkolemsTerm
-assume substituteSkolemsTerm
+substituteSkolemsTerm
   :: {t:Term | consistentSkolemScopesTerm t}
-  -> {s:[(Var, {st:Term | consistentSkolemScopesTerm st})] |
+  -> {s:[{p:(Var, {st:Term | consistentSkolemScopesTerm st}) |
+           isSubsetOfJustOrNothing (freeVars (snd p)) (IntMap.lookup (fst p) (scopesTerm t))
+         }] |
         UnionCommutes (scopesTerm t) (scopesList s)
      }
   -> {v:Term |
           intMapIsSubsetOf (scopesTerm v) (scopesTerm t)
        && consistentSkolemScopesTerm v
+       && freeVars v = freeVars t
      }
+lazy substituteSkolemsTerm
 @-}
 substituteSkolemsTerm :: Term -> [(Var, Term)] -> Term
 substituteSkolemsTerm t s = case t of
     V v -> V v
     SA (v, s1) -> case lookup v s of
-      Just t1 -> substituteSkolemsTerm t1 (toListSubst s1)
-      Nothing -> SA (v, composeSubst s1 s)
+      Just t1 -> substitute s1 t1 ? skip ()
+      Nothing -> SA (v, composeSubstList s1 s) ? skip ()
     U -> U
     L t1 -> L (substituteSkolemsTerm t1 s)
     P t1 t2 -> P (substituteSkolemsTerm t1 s) (substituteSkolemsTerm t2 s)
-  where
-    {-@ ignore composeSubst @-}
-    composeSubst :: Subst Term -> [(Var, Term)] -> Subst Term
-    composeSubst (Subst xs) s = Subst (map (fmap (`substituteSkolemsTerm` s)) xs)
 
-    toListSubst :: Subst Term -> [(Var, Term)]
-    toListSubst (Subst xs) = xs
+{-@ ignore composeSubstList @-}
+composeSubstList :: Subst Term -> [(Var, Term)] -> Subst Term
+composeSubstList (Subst xs) s = Subst (map (fmap (`substituteSkolemsTerm` s)) xs)
+
+-- | Used to skip cases that we don't want to verify
+{-@ assume skip :: _ -> { false } @-}
+skip :: () -> ()
+skip () = ()
 
 {-@
 opaque-reflect scopesList
