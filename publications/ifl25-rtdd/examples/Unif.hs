@@ -563,6 +563,8 @@ unifyEq (P t0a t0b) (P t1a t1b) = do
                         (substituteSkolemsTerm t1b (unifyT0a ? lemmaSubst))
     return $ unifyT0a ++ unifyT0b
 unifyEq U U = Just []
+unifyEq V{} t1 | Set.null (skolemSet t1) = Just []
+unifyEq t0 V{} | Set.null (skolemSet t0) = Just []
 unifyEq _ _ = Nothing
 
 -- BUG: cannot define a termination metric if conflating unifyEq and unifyEqEnd
