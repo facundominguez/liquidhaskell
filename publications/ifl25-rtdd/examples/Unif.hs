@@ -499,9 +499,12 @@ unify s f@(Conj f1 f2) = do
     let lemmaSubst = lemmaScopesListSubset (scopes f) unifyF1
     unifyF2 <- unify s (substituteSkolems (f2 ? lemmaSubst) unifyF1)
     return (unifyF1 ++ unifyF2)
-unify s f@(Then (t0, t1) f2) =
-    let subst = fromListSubst (substEq t0 t1)
-     in unify s (substituteFormula s subst (f2 ? lemmaSubst subst))
+unify s f@(Then (t0, t1) f2) = do
+    case substEq t0 t1 of
+      Nothing -> Just []
+      Just xs ->
+        let subst = fromListSubst xs
+         in unify s (substituteFormula s subst (f2 ? lemmaSubst subst))
   where
     lemmaSubst subst =
       lemmaScopesSubstSubset (intMapUnion (scopesTerm t0) (scopesTerm t1)) subst
@@ -512,21 +515,22 @@ substEq
   :: {t0:Term | consistentSkolemScopesTerm t0}
   -> {t1:Term | UnionCommutes (scopesTerm t0) (scopesTerm t1)
                 && consistentSkolemScopesTerm t1}
-  -> [(Var, {v:Term |
+  -> Maybe [(Var, {v:Term |
           intMapIsSubsetOf
             (scopesTerm v)
             (IntMap.union (scopesTerm t0) (scopesTerm t1))
        && isSubsetOf (freeVars v) (Set.union (freeVars t0) (freeVars t1))
       })]
 @-}
-substEq :: Term -> Term -> [(Var, Term)]
-substEq (V i) t1 = [(i, t1)]
-substEq t0 (V i) = [(i, t0)]
+substEq :: Term -> Term -> Maybe [(Var, Term)]
+substEq (V i) t1 = Just [(i, t1)]
+substEq t0 (V i) = Just [(i, t0)]
 substEq (L t0) (L t1) = substEq t0 t1
-substEq (P t0a t0b) (P t1a t1b) = substEq t0a t1a ++ substEq t0b t1b
-substEq SA{} _ = []
-substEq _ SA{} = []
-substEq _ _ = []
+substEq (P t0a t0b) (P t1a t1b) = (++) <$> substEq t0a t1a <*> substEq t0b t1b
+substEq U U = Just []
+substEq SA{} _ = Just []
+substEq _ SA{} = Just []
+substEq _ _ = Nothing
 
 -- BUG: ignoring a function causes the asserted signature to be ignored
 -- It needs to be assumed to work around it.
