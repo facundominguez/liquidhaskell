@@ -526,7 +526,10 @@ substEq :: Term -> Term -> Maybe [(Var, Term)]
 substEq (V i) t1 = Just [(i, t1)]
 substEq t0 (V i) = Just [(i, t0)]
 substEq (L t0) (L t1) = substEq t0 t1
-substEq (P t0a t0b) (P t1a t1b) = (++) <$> substEq t0a t1a <*> substEq t0b t1b
+substEq (P t0a t0b) (P t1a t1b) =
+    -- TODO: apply the substitutions discovered in the first component to the
+    -- second component. Needs working on the refinement type signature of substitute.
+    (++) <$> substEq t0a t1a <*> substEq t0b t1b
 substEq U U = Just []
 substEq SA{} _ = Just []
 substEq _ SA{} = Just []
