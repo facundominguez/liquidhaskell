@@ -22,15 +22,18 @@ import Language.Haskell.Liquid.ProofCombinators
 import State
 
 -- BUG: The verification time seems to be superlinear on the size of the
--- module. Unfortunately, name resolution issues still prevent a convenient
--- split. We keep here a list of functions whose checking we can disable
--- to reduce the verification time.
+-- module at the moment. Unfortunately, name resolution issues still prevent a
+-- convenient split. We keep here a list of functions whose checking we can
+-- disable to reduce the verification time.
 {-@
 // ignore unify
 // ignore unifyEq
 // ignore unifyEqEnd
 // ignore substEq
 // ignore unifyFormula
+// ignore lemmaConsistentSuperset
+// ignore lemmaConsistentSupersetTerm
+// ignore lemmaConsistentSupersetSubst
 @-}
 
 -- We start with a preamble of definitions to introduce the interpretation of
@@ -276,9 +279,6 @@ formulaSize (Conj f1 f2) = 1 + formulaSize f1 + formulaSize f2
 formulaSize (Then _ f2) = 1 + formulaSize f2
 formulaSize (Eq t0 t1) = 1
 
--- BUG: Moving substitute-related functions to another module causes LH to
--- reject their calls in other functions.
-
 -- BUG: assumed specs are ignored when the function is reflected
 {-@
 substitute
@@ -424,6 +424,9 @@ lemmaConsistentScopesSubst _ _ = ()
 -- Every time that `SA (i,s)` occurs, the domain of `s` is exactly the set of
 -- bound variables in scope.
 {-@
+// BUG: calls to reflected functions are not visible to PLE when they appear in
+// refinement types inferred by LH. This prevents us from checking skolemize at
+// the moment, which needs to infer types when checking monadic functions.
 ignore skolemize
 assume skolemize
   :: sf:_
@@ -749,7 +752,7 @@ lemmaConsistentSupersetTerm
   :: IntMap (Set Int) -> IntMap (Set Int) -> Term -> ()
 lemmaConsistentSupersetTerm m0 m1 (V _) = ()
 lemmaConsistentSupersetTerm m0 m1 (SA (i, s)) =
-      lemmaConsistentScopesSuperset m0 m1 s
+      lemmaConsistentSupersetSubst m0 m1 s
 lemmaConsistentSupersetTerm m0 m1 U = ()
 lemmaConsistentSupersetTerm m0 m1 (L t) =
     lemmaConsistentSupersetTerm m0 m1 t
@@ -758,15 +761,15 @@ lemmaConsistentSupersetTerm m0 m1 (P t0 t1) =
     ? lemmaConsistentSupersetTerm m0 m1 t1
 
 {-@
-assume lemmaConsistentScopesSuperset
+assume lemmaConsistentSupersetSubst
   :: m0:_
   -> {m1:_ | intMapIsSubsetOf m0 m1}
   -> {s:_ | consistentUnificationScopesSubst m0 s}
   -> {consistentUnificationScopesSubst m1 s}
 @-}
-lemmaConsistentScopesSuperset
+lemmaConsistentSupersetSubst
   :: IntMap (Set Int) -> IntMap (Set Int) -> Subst Term -> ()
-lemmaConsistentScopesSuperset _ _ _ = ()
+lemmaConsistentSupersetSubst _ _ _ = ()
 
 
 -----------------------
@@ -923,6 +926,7 @@ scopesTerm U = IntMap.empty
 scopesTerm (L t) = scopesTerm t
 scopesTerm (P t0 t1) = IntMap.union (scopesTerm t0) (scopesTerm t1)
 
+{-@ ignore scopesSubst @-}
 scopesSubst :: Subst Term -> IntMap (Set Int)
 scopesSubst (Subst xs) =
     foldr IntMap.union IntMap.empty $ map (scopesTerm . snd) xs
@@ -959,3 +963,24 @@ test = do
         else putStrLn $
                concat ["Test ", name, ": Failed\n", show expected, " but got ",
                        show result, "\n"]
+
+-- Other bugs encounter in earlier versions of this example
+
+-- BUG: The // comments inside {-@ @-} must be followed by at least a space,
+-- following immediately with an end of line causes an error message sometimes.
+
+-- BUG: Appartently Liquid Haskell cannot prove termination of recursive
+-- functions on mutually recursive types.
+
+-- BUG: Moving substitute-related functions to another module causes LH to
+-- reject their calls in other functions.
+
+-- BUG: LH appeared to hang when trying to check the Exists case of earlier
+-- versions of skolemize.
+
+-- BUG: lemmas applied in where clauses are sometimes visible and sometimes not.
+-- Lemmas in let have worked when we try them.
+--
+-- > let lemma x y = long lemma ...
+-- >  in ... (e ? lemma e1 e2) ...
+--
