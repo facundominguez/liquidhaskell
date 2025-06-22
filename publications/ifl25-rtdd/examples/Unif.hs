@@ -314,19 +314,13 @@ substitute s t = case t of
 
 -- This lemma should be possible to generalize by dropping the @isVar@
 -- requirement and asking @UnionCommutes (scopesTerm t) (scopesSubst s)@
--- instead.
+-- instead. Another direction would be to strengthen it by saying in the
+-- consequent that the scopes in the input ant the output are exactly the
+-- same.
 {-@
 // If the range of the substitution only contains variable terms, then
-// substitution preserves the scopes of a term, and therefore the unification
-// scopes are consistent because they are assumed to be consistent in the input.
-// 
-// We should be requiring here that the terms in the input substitution have
-// consistent scopes between each other, and that their unions commute.
-// 
-// Changing this would require plunging forward asking for the unions of term
-// scopes to commute, which probably is going to turn to clunky to worth the
-// trouble. This approach is better stopped here. It may be possible to go
-// farther by changing the approach to express scope consistency.
+// they have no unification scopes, and substitution preserves the scopes of
+// the input term.
 assume lemmaSubstituteConsistentScopes
   :: s:Subst {st:Term | isVar st}
   -> {t:Term | consistentSkolemScopesTerm t }
@@ -425,7 +419,7 @@ scopesSubst (Subst xs) =
 // 
 // The unification scopes in the result of the substitution should be consistent
 // because they are consistent in the input. They should be consistent in the
-// range of the substitution too, although that isn't check. And the unions of
+// range of the substitution too, although that isn't checked. And the unions of
 // scopes in these terms should also commute, which we aren't checking either.
 // This is the third conjunct. Making the lemma more accurate will require
 // changing the strategy to express scope consistency probably.
