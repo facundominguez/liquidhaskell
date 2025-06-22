@@ -21,6 +21,18 @@ import Language.Haskell.Liquid.ProofCombinators
 -- from a sibling source file:
 import State
 
+-- BUG: The verification time seems to be superlinear on the size of the
+-- module. Unfortunately, name resolution issues still prevent a convenient
+-- split. We keep here a list of functions whose checking we can disable
+-- to reduce the verification time.
+{-@
+// ignore unify
+// ignore unifyEq
+// ignore unifyEqEnd
+// ignore substEq
+// ignore unifyFormula
+@-}
+
 -- We start with a preamble of definitions to introduce the interpretation of
 -- the IntMap type as an array. Any @IntMap a b@ in this file is interpreted as
 -- an array mapping integers to values of type @Set Int@, so we are careful to
@@ -142,6 +154,8 @@ assume fromSetIdSubst ::
 fromSetIdSubst :: Set Int -> Subst Term
 fromSetIdSubst s = Subst [(i, V i) | i <- Set.toList s]
 
+-- BUG: Moving this definition to another module causes LH to complain that the
+-- symbol skolemSet is undefined.
 {-@ opaque-reflect domain @-}
 {-@ ignore domain @-}
 domain :: Subst e -> Set Int
@@ -209,6 +223,8 @@ freeVarsFormula = \case
       Set.union (Set.union (freeVars t0) (freeVars t1)) (freeVarsFormula f2)
     Eq t0 t1 -> Set.union (freeVars t0) (freeVars t1)
 
+-- BUG: Moving this definition to another module causes LH to complain that the
+-- symbol skolemSet is undefined.
 {-@ opaque-reflect skolemSet @-}
 skolemSet :: Term -> Set Var
 skolemSet = \case
@@ -260,6 +276,8 @@ formulaSize (Conj f1 f2) = 1 + formulaSize f1 + formulaSize f2
 formulaSize (Then _ f2) = 1 + formulaSize f2
 formulaSize (Eq t0 t1) = 1
 
+-- BUG: Moving substitute-related functions to another module causes LH to
+-- reject their calls in other functions.
 
 -- BUG: assumed specs are ignored when the function is reflected
 {-@
@@ -678,12 +696,266 @@ skip () = ()
 
 {-@
 unifyFormula
-  :: s:_
-  -> {m:_ | isSubsetOf s (IntMapSetInt_keys m)}
-  -> f:ConsistentScopedFormula s m
-  -> Maybe [(Var, Term)]
+  :: s:_ -> m:_ -> f:ConsistentScopedFormula s m -> Maybe [(Var, Term)]
 @-}
 unifyFormula :: Set Int -> IntMap (Set Int) -> Formula -> Maybe [(Var, Term)]
 unifyFormula s m f =
-    let (f', m') = runState (skolemize s f) m
-     in unify s m' f'
+    let m' = qvToScopes s m
+        skf = skolemize s f ? lemmaConsistentSuperset m m' f
+        (f'', m'') = runState skf m'
+     in unify s m'' f''
+
+{-@
+ignore qvToScopes
+assume qvToScopes
+  :: s:_
+  -> m:_
+  -> {v:_ | intMapIsSubsetOf m v && isSubsetOf s (IntMapSetInt_keys v)}
+@-}
+qvToScopes :: Set Int -> IntMap (Set Int) -> IntMap (Set Int)
+qvToScopes s m =
+    IntMap.union (IntMap.fromList [(i, s) | i <- Set.toList s]) m
+
+{-@
+lemmaConsistentSuperset
+  :: m0:_
+  -> {m1:_ | intMapIsSubsetOf m0 m1}
+  -> {f:_ | consistentUnificationScopes m0 f}
+  -> {consistentUnificationScopes m1 f}
+@-}
+lemmaConsistentSuperset
+  :: IntMap (Set Int) -> IntMap (Set Int) -> Formula -> ()
+lemmaConsistentSuperset m0 m1 (Forall _ f) = lemmaConsistentSuperset m0 m1 f
+lemmaConsistentSuperset m0 m1 (Exists _ f) = lemmaConsistentSuperset m0 m1 f
+lemmaConsistentSuperset m0 m1 (Conj f1 f2) =
+      lemmaConsistentSuperset m0 m1 f1
+    ? lemmaConsistentSuperset m0 m1 f2
+lemmaConsistentSuperset m0 m1 (Then (t0, t1) f2) =
+      lemmaConsistentSupersetTerm m0 m1 t0
+    ? lemmaConsistentSupersetTerm m0 m1 t1
+    ? lemmaConsistentSuperset m0 m1 f2
+lemmaConsistentSuperset m0 m1 (Eq t0 t1) =
+      lemmaConsistentSupersetTerm m0 m1 t0
+    ? lemmaConsistentSupersetTerm m0 m1 t1
+
+{-@
+lemmaConsistentSupersetTerm
+  :: m0:_
+  -> {m1:_ | intMapIsSubsetOf m0 m1}
+  -> {t:_ | consistentUnificationScopesTerm m0 t}
+  -> {consistentUnificationScopesTerm m1 t}
+@-}
+lemmaConsistentSupersetTerm
+  :: IntMap (Set Int) -> IntMap (Set Int) -> Term -> ()
+lemmaConsistentSupersetTerm m0 m1 (V _) = ()
+lemmaConsistentSupersetTerm m0 m1 (SA (i, s)) =
+      lemmaConsistentScopesSuperset m0 m1 s
+lemmaConsistentSupersetTerm m0 m1 U = ()
+lemmaConsistentSupersetTerm m0 m1 (L t) =
+    lemmaConsistentSupersetTerm m0 m1 t
+lemmaConsistentSupersetTerm m0 m1 (P t0 t1) =
+    lemmaConsistentSupersetTerm m0 m1 t0
+    ? lemmaConsistentSupersetTerm m0 m1 t1
+
+{-@
+assume lemmaConsistentScopesSuperset
+  :: m0:_
+  -> {m1:_ | intMapIsSubsetOf m0 m1}
+  -> {s:_ | consistentUnificationScopesSubst m0 s}
+  -> {consistentUnificationScopesSubst m1 s}
+@-}
+lemmaConsistentScopesSuperset
+  :: IntMap (Set Int) -> IntMap (Set Int) -> Subst Term -> ()
+lemmaConsistentScopesSuperset _ _ _ = ()
+
+
+-----------------------
+-- Tracing and tests
+-----------------------
+
+{-@ ignore unifyFormulaTrace @-}
+unifyFormulaTrace :: Formula -> Maybe [(Var, Term)]
+unifyFormulaTrace = unifyFormula' True
+
+{-@ ignore unifyFormula' @-}
+unifyFormula' :: Bool -> Formula -> Maybe [(Var, Term)]
+unifyFormula' mustTrace f =
+    traceUnify
+          "                     unify" .
+    uncurry (unify sf) $
+    (\(skf, m) ->
+      (m, trace "                 skolemize" skf)
+    ) $
+    (\_ -> runState (skolemize sf f) mf) $
+    trace "                   initial" f
+  where
+    sf = freeVarsFormula f
+    mf = scopes f
+
+    trace :: String -> Formula -> Formula
+    trace label f
+      | mustTrace =
+          Debug.Trace.trace (label ++ ": " ++ ppFormula prettyName f) f
+      | otherwise = f
+    traceUnify :: String -> Maybe [(Var, Term)] -> Maybe [(Var, Term)]
+    traceUnify label xs
+      | mustTrace = Debug.Trace.trace (label ++ ": " ++ showUnification xs) xs
+      | otherwise = xs
+    showUnification :: Maybe [(Var, Term)] -> String
+    showUnification Nothing = "Nothing"
+    showUnification (Just xs) =
+      let xs' = map (\(i, t) -> (prettyName i, ppTerm prettyName t)) xs
+       in "[" ++
+          List.intercalate ", " (map (\(i, t) -> i ++ ":=" ++ t) xs') ++
+          "]"
+
+-- pretty printing
+
+-- | Pretty print a variable name
+{-@ ignore prettyName @-}
+prettyName :: Int -> String
+prettyName =
+  ((["x", "y", "z", "u", "v", "w", "r", "s", "t"] ++
+    [ "v" ++ show i | i <- [1..] ]) !!)
+
+-- | Pretty print a formula
+{-@ ignore ppFormula @-}
+ppFormula :: (Int -> String) -> Formula -> String
+ppFormula vnames = go
+  where
+    go (Forall v f) = "∀" ++ (vnames v) ++ ". " ++ go f
+    go (Exists v f) = "∃" ++ (vnames v) ++ ". " ++ go f
+    go (Conj f1 f2) = "(" ++ go f1 ++ ") ∧ (" ++ go f2 ++ ")"
+    go (Then (t0, t1) f2) = go (Eq t0 t1) ++ " → " ++ go f2
+    go (Eq t0 t1) = ppTerm vnames t0 ++ " == " ++ ppTerm vnames t1
+
+{-@ ignore ppTerm @-}
+ppTerm :: (Int -> String) -> Term -> String
+ppTerm vnames t =
+  case t of
+    V i -> vnames i
+    SA (i, s) -> vnames i ++ ppSubst vnames s
+    U -> "U"
+    L t1 -> "L(" ++ ppTerm vnames t1 ++ ")"
+    P t1 t2 -> "P(" ++ ppTerm vnames t1 ++ ", " ++ ppTerm vnames t2 ++ ")"
+
+{-@ ignore ppSubst @-}
+ppSubst :: (Int -> String) -> Subst Term -> String
+ppSubst vnames (Subst xs) =
+  "[" ++
+  List.intercalate
+    ", " (map (\(i, t) -> vnames i ++ ":=" ++ ppTerm vnames t) xs) ++
+  "]"
+
+
+-- Test formulas
+
+tf0 :: Formula
+tf0 = Forall 0 $ Exists 1 $ V 1 `Eq` V 0
+
+tf1 :: Formula
+tf1 =
+  Forall 0 $ Exists 1 $ Forall 2 $
+    (V 1 `Eq` V 0) `Conj` (Exists 1 $ V 1 `Eq` V 2)
+
+tf2 :: Formula
+tf2 =
+  Forall 0 $ Exists 1 $
+    (V 1 `Eq` V 0) `Conj` (Forall 2 $ Exists 1 $ V 1 `Eq` V 2)
+
+tf3 :: Formula
+tf3 =
+  Conj
+    (Forall 1 $ Exists 0 $ V 0 `Eq` V 1)
+    (Forall 2 $ Exists 0 $ V 0 `Eq` V 2)
+
+tf4 :: Formula
+tf4 = Forall 0 $ Forall 1 $
+  (V 0, L (V 1)) `Then` Exists 2 (Eq (V 0) (L (V 2)))
+
+tf5 :: Formula
+tf5 = Forall 0 $ Forall 1 $
+  (V 0, L (V 1))
+    `Then` Forall 1 ((V 1, V 0)
+    `Then` Exists 2 (Eq (V 1) (L (V 2))))
+
+tf6 :: Formula
+tf6 = Forall 0 $ Forall 0 $ Exists 1 (Eq (V 1) (V 0))
+
+tf7 :: Formula
+tf7 = Forall 0 $ Exists 1 $ Exists 2 $ (V 0, V 1) `Then` Eq (V 0) (V 2)
+
+infixr 7 `Then`
+infixr 8 `Conj`
+
+-- forall a b c. exists t_f x_f.
+--   a = (b, c) -> a = (Int -> Int, Int) -> t_f = b -> x_f = c ->
+--     exists l r. t_f = l -> r /\ l = x_f /\ x_f = Int -> r = c
+tf8 :: Formula
+tf8 = Forall 0 $ Forall 1 $ Forall 2 $
+  Exists 3 (Exists 4 $
+    (V 0, P (V 1) (V 2))
+      `Then` (V 0, P (P U U) U)
+      `Then` (V 3, V 1)
+      `Then` (V 4, V 2)
+      `Then`
+    Exists 5 (Exists 6 $
+             Eq (V 3) (P (V 5) (V 6))
+      `Conj` Eq (V 5) (V 4)
+      `Conj` ((V 4, U) `Then` Eq (V 6) (V 2))
+    )
+  )
+
+{-@ ignore scopes @-}
+scopes :: Formula -> IntMap (Set Int)
+scopes (Forall _ f) = scopes f
+scopes (Exists _ f) = scopes f
+scopes (Conj f1 f2) = IntMap.union (scopes f1) (scopes f2)
+scopes (Then (t0, t1) f2) =
+    IntMap.union (scopesTerm t0) (IntMap.union (scopesTerm t1) (scopes f2))
+scopes (Eq t0 t1) = IntMap.union (scopesTerm t0) (scopesTerm t1)
+
+{-@ ignore scopesTerm @-}
+scopesTerm :: Term -> IntMap (Set Int)
+scopesTerm (V i) = IntMap.empty
+scopesTerm (SA (i, s)) = IntMap.insert i (domain s) (scopesSubst s)
+scopesTerm U = IntMap.empty
+scopesTerm (L t) = scopesTerm t
+scopesTerm (P t0 t1) = IntMap.union (scopesTerm t0) (scopesTerm t1)
+
+scopesSubst :: Subst Term -> IntMap (Set Int)
+scopesSubst (Subst xs) =
+    foldr IntMap.union IntMap.empty $ map (scopesTerm . snd) xs
+
+{-@ ignore test @-}
+test :: IO ()
+test = do
+  let tests =
+        [ ("tf0", (tf0, Just [(1,V 0)]))
+        , ("tf1", (tf1, Just [(1,V 0), (3,V 2)]))
+        , ("tf2", (tf2, Just [(1,V 0), (3,V 2)]))
+        , ("tf3", (tf3, Just [(0,V 1), (3,V 2)]))
+        , ("tf4", (tf4, Just [(2,V 1)]))
+        , ("tf5", (tf5, Just [(2,V 1)]))
+        , ("tf6", (tf6, Just [(1,V 0)]))
+        , ("tf7", (tf7, Nothing))
+        , ("tf8", (tf8,
+            Just [(3,P (SA (5,Subst [(0,P (P U U) U),(1,P U U),(2,U)]))
+                       (SA (6,Subst [(0,P (P U U) U),(1,P U U),(2,U)])))
+                 ,(5,SA (4,Subst [(0,P (P U U) U),(1,P U U),(2,U)]))
+                 ,(6,U)])
+          )
+        ]
+  mapM_ runUnificationTest tests
+  where
+    runUnificationTest :: (String, (Formula, Maybe [(Var, Term)])) -> IO ()
+    runUnificationTest (name, (f, expected)) = do
+      let result = unifyFormula
+            (freeVarsFormula f)
+            (scopes f)
+            f
+      if result == expected
+        then putStrLn $ concat ["Test ", name, ": Passed"]
+        else putStrLn $
+               concat ["Test ", name, ": Failed\n", show expected, " but got ",
+                       show result, "\n"]
