@@ -4,11 +4,9 @@
 {-@ LIQUID "--short-names" @-}
 {-@ LIQUID "--prune-unsorted" @-}
 {-@ LIQUID "--no-pattern-inline" @-}
-{- LIQUID "--max-case-expand=5" @-}
 module Unif2 where
 
 import Data.List qualified as List
-import Data.Maybe
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Set (Set)
@@ -55,18 +53,6 @@ define intMapIsSubsetOf x y = IntMapSetInt_isSubsetOf x y
 intMapIsSubsetOf :: IntMap (Set Int) -> IntMap (Set Int) -> Bool
 intMapIsSubsetOf _ _ = undefined
 
--- It shouldn't be necessary to define intMapUnion, but without it, we get
--- that IntMap.union is not correctly expanded to what the preamble defines.
-{-@ assume intMapUnion
-     :: s0:IntMap (Set Int)
-     -> s1:IntMap (Set Int)
-     -> {v:_ | IntMap.union s0 s1 = v }
-@-}
-{-@ inline intMapUnion @-}
-{-@ ignore intMapUnion @-}
-intMapUnion :: IntMap (Set Int) -> IntMap (Set Int) -> IntMap (Set Int)
-intMapUnion a b = IntMap.union a (mid b)
-
 {-@ inline mid @-}
 mid :: IntMap (Set Int) -> IntMap (Set Int)
 mid m = m
@@ -110,7 +96,6 @@ emptySubst :: Subst e
 emptySubst = Subst []
 
 {-@
-opaque-reflect extendSubst
 // Extending a substitution should guarantee that the new domain includes the
 // new variable.
 assume extendSubst
@@ -125,7 +110,6 @@ extendSubst
   :: Set Int -> IntMap (Set Int) -> Subst Term -> Var -> Term -> Subst Term
 extendSubst _ _ (Subst s) i e = Subst ((i, e) : s)
 
-{-@ opaque-reflect fromListSubst @-}
 {-@
 // Creates a substitution whose domain includes all variables. Variables
 // that are not in the input list are mapped to themselves.
@@ -134,7 +118,6 @@ assume fromListSubst :: _ -> {v:_ | Set_com empty = domain v}
 fromListSubst :: [(Var, t)] -> Subst t
 fromListSubst = Subst
 
-{-@ opaque-reflect fromListSubst2 @-}
 {-@
 // Like formListSubst, but with stronger guarantees.
 assume fromListSubst2
@@ -151,7 +134,6 @@ assume fromListSubst2
 fromListSubst2 :: Set Int -> IntMap (Set Int) -> [(Var, Term)] -> Subst Term
 fromListSubst2 _ _ = Subst
 
-{-@ opaque-reflect fromSetIdSubst @-}
 {-@
 // Creates a substitution that maps each variable in the set to itself.
 assume fromSetIdSubst ::
@@ -281,7 +263,6 @@ formulaSize (Eq t0 t1) = 1
 
 -- BUG: assumed specs are ignored when the function is reflected
 {-@
-reflect substitute
 substitute
   :: s:_
   -> m:_
@@ -302,7 +283,6 @@ substitute s m ss t = case t of
 
 {-@
 ignore composeSubst
-opaque-reflect composeSubst
 assume composeSubst
   :: s:_
   -> m:_
@@ -316,7 +296,6 @@ composeSubst s m s0 (Subst xs) =
   Subst (map (fmap (substitute s m s0)) xs)
 
 {-@
-opaque-reflect substituteFormula
 substituteFormula
   :: s:Set Int
   -> m:IntMap (Set Int)
@@ -326,7 +305,6 @@ substituteFormula
           formulaSize f == formulaSize v
        && consistentUnificationScopes m v
        && existsCount v = existsCount f
- //      && intMapIsSubsetOf (scopes v) (IntMap.union (scopes f) (scopesSubst ss))
      } / [formulaSize f]
 @-}
 substituteFormula
@@ -531,8 +509,7 @@ substEq _ _ _ _ = Nothing
 -- It needs to be assumed to work around it.
 {-@
 lazy unifyEq
-ignore unifyEq
-assume unifyEq
+unifyEq
   :: s:_
   -> m:_
   -> t0:ConsistentScopedTerm s m
@@ -672,7 +649,7 @@ substituteSkolemsTerm s m t ss = case t of
     V v -> V v
     SA (v, s1) -> case findPair v ss of
       -- BUG?: This looks like it could be checking that freeVars (snd p)
-      -- is a subset domain s1. But for some reason it doesn't.
+      -- is a subset of domain s1. But for some reason it doesn't.
       Just p -> substitute s m s1 (snd p ? skip ())
       Nothing -> let subst = fromListSubst2 s m ss
                   in SA (v, composeSubst s m subst s1)
@@ -682,7 +659,7 @@ substituteSkolemsTerm s m t ss = case t of
 
 {-@ assume findPair :: a:_ -> [(a, b)] -> Maybe ({ra:_ | ra = a}, b) @-}
 findPair :: Eq a => a -> [(a, b)] -> Maybe (a, b)
-findPair a = List.find ((a ==) . fst)
+findPair a = List.find (\(x, _) -> a == x)
 
 {-@ inline isSubsetOfJustOrNothing @-}
 isSubsetOfJustOrNothing :: Set Int -> Maybe (Set Int) -> Bool
