@@ -141,7 +141,7 @@ assume fromListSubst2
   -> m:_
   -> [(Var, Term<p>)]
   -> {v:Subst Term<p> |
-          consistentUnificationScopesSubst m v
+          consistentScopesSubst m v
        && isSubsetOf (freeVarsSubst v) s
        && Set_com empty = domain v
      }
@@ -258,14 +258,14 @@ type ScopedFormula S = {f:Formula | isSubsetOf (freeVarsFormula f) S}
 type ConsistentScopedFormula S M =
      {f:Formula |
           isSubsetOf (freeVarsFormula f) S
-       && consistentUnificationScopes M f
+       && consistentScopes M f
      }
 type ConsistentScopedTerm S M =
-     {t:Term | isSubsetOf (freeVars t) S && consistentUnificationScopesTerm M t}
+     {t:Term | isSubsetOf (freeVars t) S && consistentScopesTerm M t}
 type ConsistentScopedSubst S M =
      {ss:Subst Term |
            isSubsetOf (freeVarsSubst ss) S
-        && consistentUnificationScopesSubst M ss
+        && consistentScopesSubst M ss
      }
 @-}
 
@@ -318,10 +318,10 @@ substituteFormula
   :: s:Set Int
   -> m:IntMap (Set Int)
   -> ss:ConsistentScopedSubst s m
-  -> {f:ScopedFormula (domain ss) | consistentUnificationScopes m f}
+  -> {f:ScopedFormula (domain ss) | consistentScopes m f}
   -> {v:ScopedFormula s |
           formulaSize f == formulaSize v
-       && consistentUnificationScopes m v
+       && consistentScopes m v
        && existsCount v = existsCount f
      } / [formulaSize f]
 @-}
@@ -363,43 +363,43 @@ substituteFormula s m ss = \case
            (substituteFormula s m ss f2)
     Eq t0 t1 -> Eq (substitute s m ss t0) (substitute s m ss t1)
 
-{-@ reflect consistentUnificationScopes @-}
-consistentUnificationScopes :: IntMap (Set Int) ->  Formula -> Bool
-consistentUnificationScopes m (Forall _ f) = consistentUnificationScopes m f
-consistentUnificationScopes m (Exists _ f) = consistentUnificationScopes m f
-consistentUnificationScopes m (Conj f1 f2) =
-      consistentUnificationScopes m f1 && consistentUnificationScopes m f2
-consistentUnificationScopes m (Then (t0, t1) f2) =
-     consistentUnificationScopes m f2
-  && consistentUnificationScopesTerm m t0
-  && consistentUnificationScopesTerm m t1
-consistentUnificationScopes m (Eq t0 t1) =
-     consistentUnificationScopesTerm m t0
-  && consistentUnificationScopesTerm m t1
+{-@ reflect consistentScopes @-}
+consistentScopes :: IntMap (Set Int) ->  Formula -> Bool
+consistentScopes m (Forall _ f) = consistentScopes m f
+consistentScopes m (Exists _ f) = consistentScopes m f
+consistentScopes m (Conj f1 f2) =
+      consistentScopes m f1 && consistentScopes m f2
+consistentScopes m (Then (t0, t1) f2) =
+     consistentScopes m f2
+  && consistentScopesTerm m t0
+  && consistentScopesTerm m t1
+consistentScopes m (Eq t0 t1) =
+     consistentScopesTerm m t0
+  && consistentScopesTerm m t1
 
-{-@ reflect consistentUnificationScopesTerm @-}
-consistentUnificationScopesTerm :: IntMap (Set Int) -> Term -> Bool
-consistentUnificationScopesTerm m (V _) = True
-consistentUnificationScopesTerm m (SA (i, s)) =
+{-@ reflect consistentScopesTerm @-}
+consistentScopesTerm :: IntMap (Set Int) -> Term -> Bool
+consistentScopesTerm m (V _) = True
+consistentScopesTerm m (SA (i, s)) =
        IntMap.lookup i m == Just (domain s)
-    && consistentUnificationScopesSubst m s
-consistentUnificationScopesTerm m U = True
-consistentUnificationScopesTerm m (L t) = consistentUnificationScopesTerm m t
-consistentUnificationScopesTerm m (P t0 t1) =
-    consistentUnificationScopesTerm m t0 && consistentUnificationScopesTerm m t1
+    && consistentScopesSubst m s
+consistentScopesTerm m U = True
+consistentScopesTerm m (L t) = consistentScopesTerm m t
+consistentScopesTerm m (P t0 t1) =
+    consistentScopesTerm m t0 && consistentScopesTerm m t1
 
-{-@ opaque-reflect consistentUnificationScopesSubst @-}
-{-@ ignore consistentUnificationScopesSubst @-}
-consistentUnificationScopesSubst :: IntMap (Set Int) -> Subst Term -> Bool
-consistentUnificationScopesSubst m (Subst xs) =
-    all (\(i, t) -> consistentUnificationScopesTerm m t) xs
+{-@ opaque-reflect consistentScopesSubst @-}
+{-@ ignore consistentScopesSubst @-}
+consistentScopesSubst :: IntMap (Set Int) -> Subst Term -> Bool
+consistentScopesSubst m (Subst xs) =
+    all (\(i, t) -> consistentScopesTerm m t) xs
 
 {-@
 assume castConsistentScopesSubst
   :: s:_
   -> m:_
   -> {ss:_ |
-         consistentUnificationScopesSubst m ss
+         consistentScopesSubst m ss
       && isSubsetOf (freeVarsSubst ss) s
      }
   -> {v:Subst (ConsistentScopedTerm s m) | v = ss}
@@ -411,8 +411,8 @@ castConsistentScopesSubst _ _ ss = ss
 {-@
 assume lemmaConsistentScopesSubst
   :: m:_
-  -> ss:Subst {t:_ | consistentUnificationScopesTerm m t}
-  -> { consistentUnificationScopesSubst m ss}
+  -> ss:Subst {t:_ | consistentScopesTerm m t}
+  -> { consistentScopesSubst m ss}
 @-}
 lemmaConsistentScopesSubst
   :: IntMap (Set Int) -> Subst Term -> ()
@@ -434,11 +434,11 @@ assume skolemize
   -> State
        <{\m0 ->
             isSubsetOf sf (IntMapSetInt_keys m0)
-         && consistentUnificationScopes m0 f
+         && consistentScopes m0 f
         }
 
        , {\m0 v m ->
-             consistentUnificationScopes m v
+             consistentScopes m v
           && existsCount v = 0
           && isSubsetOf (freeVarsFormula v) sf
           && intMapIsSubsetOf m0 m
@@ -451,8 +451,6 @@ skolemize sf (Forall v f) = do
     put (IntMap.insert v sf m)
     f' <- skolemize (Set.insert v sf) f
     pure (Forall v f')
--- BUG: LH hangs when trying to check the Exists case of skolemize
--- Therefore, we 'skip' it.
 skolemize sf (Exists v f) = do
     m <- get
     let u = if IntMap.member v m then freshVar (Set.fromList (IntMap.keys m)) else v
@@ -479,11 +477,14 @@ skolemize _ f@Eq{} = pure f
 -- > unify (t == SA (i, s))@ is @[(i, substitute (inverseSubst s) t)
 --
 {-@
+// BUG: LH is supposed to support a syntax like for dependant pairs that
+// actually causes checking to fail. (v :: Var, {t:_ | ... v ... }) so we had
+// to resort to using pair projections {p:_ | ... fst p ... snd p ... } instead.
 unify
   :: s:Set Int
   -> m:_
   -> {f:ConsistentScopedFormula s m | existsCount f = 0}
-  -> Maybe [{p:(Var, {t:Term | consistentUnificationScopesTerm m t}) |
+  -> Maybe [{p:(Var, {t:Term | consistentScopesTerm m t}) |
            isSubsetOfJust (freeVars (snd p)) (IntMap.lookup (fst p) m)
         && not (Set.member (fst p) (skolemSet (snd p)))
       }] / [formulaSize f]
@@ -539,7 +540,7 @@ unifyEq
   -> m:_
   -> t0:ConsistentScopedTerm s m
   -> t1:ConsistentScopedTerm s m
-  -> Maybe [{p:(Var, {t:Term | consistentUnificationScopesTerm m t}) |
+  -> Maybe [{p:(Var, {t:Term | consistentScopesTerm m t}) |
            isSubsetOfJust (freeVars (snd p)) (IntMap.lookup (fst p) m)
         && not (Set.member (fst p) (skolemSet (snd p)))
       }]
@@ -566,7 +567,7 @@ unifyEqEnd
   -> m:_
   -> t0:ConsistentScopedTerm s m
   -> t1:ConsistentScopedTerm s m
-  -> Maybe [{p:(Var, {t:Term | consistentUnificationScopesTerm m t}) |
+  -> Maybe [{p:(Var, {t:Term | consistentScopesTerm m t}) |
            isSubsetOfJust (freeVars (snd p)) (IntMap.lookup (fst p) m)
         && not (Set.member (fst p) (skolemSet (snd p)))
       }]
@@ -607,7 +608,7 @@ inverseSubst
   -> m:_
   -> _
   -> Maybe
-      ({v:Subst {t:_ | isVar t && consistentUnificationScopesTerm m t} |
+      ({v:Subst {t:_ | isVar t && consistentScopesTerm m t} |
          Set_com Set.empty == domain v
        })
 @-}
@@ -616,14 +617,14 @@ inverseSubst s m (Subst xs) = fromListSubst <$> go xs
   where
     {-@
     go :: _
-       -> Maybe [(Var, {t:_ | isVar t && consistentUnificationScopesTerm m t})]
+       -> Maybe [(Var, {t:_ | isVar t && consistentScopesTerm m t})]
     @-}
     go :: [(Var, Term)] -> Maybe [(Var, Term)]
     go [] = Just []
     go ((i, V j) : xs) = do
        xs' <- go xs
        -- BUG: here LH is not accepting that @V i@ satisfies
-       -- @consistentUnificationScopesTerm m (V i)@
+       -- @consistentScopesTerm m (V i)@
        return ((j, V i ? skip ()) : xs')
     go _ = Nothing
 
@@ -632,7 +633,7 @@ substituteSkolems
   :: s:_
   -> m:_
   -> {f:ConsistentScopedFormula s m | existsCount f = 0}
-  -> ss:[{p:(Var, {st:Term | consistentUnificationScopesTerm m st}) |
+  -> ss:[{p:(Var, {st:Term | consistentScopesTerm m st}) |
           isSubsetOfJustOrNothing
             (freeVars (snd p))
             (IntMap.lookup (fst p) m)
@@ -660,7 +661,7 @@ substituteSkolemsTerm
   :: s:_
   -> m:_
   -> t:ConsistentScopedTerm s m
-  -> ss:[{p:(Var, {t:Term | consistentUnificationScopesTerm m t}) |
+  -> ss:[{p:(Var, {t:Term | consistentScopesTerm m t}) |
            isSubsetOfJustOrNothing
              (freeVars (snd p))
              (IntMap.lookup (fst p) m)
@@ -723,8 +724,8 @@ qvToScopes s m =
 lemmaConsistentSuperset
   :: m0:_
   -> {m1:_ | intMapIsSubsetOf m0 m1}
-  -> {f:_ | consistentUnificationScopes m0 f}
-  -> {consistentUnificationScopes m1 f}
+  -> {f:_ | consistentScopes m0 f}
+  -> {consistentScopes m1 f}
 @-}
 lemmaConsistentSuperset
   :: IntMap (Set Int) -> IntMap (Set Int) -> Formula -> ()
@@ -745,8 +746,8 @@ lemmaConsistentSuperset m0 m1 (Eq t0 t1) =
 lemmaConsistentSupersetTerm
   :: m0:_
   -> {m1:_ | intMapIsSubsetOf m0 m1}
-  -> {t:_ | consistentUnificationScopesTerm m0 t}
-  -> {consistentUnificationScopesTerm m1 t}
+  -> {t:_ | consistentScopesTerm m0 t}
+  -> {consistentScopesTerm m1 t}
 @-}
 lemmaConsistentSupersetTerm
   :: IntMap (Set Int) -> IntMap (Set Int) -> Term -> ()
@@ -764,8 +765,8 @@ lemmaConsistentSupersetTerm m0 m1 (P t0 t1) =
 assume lemmaConsistentSupersetSubst
   :: m0:_
   -> {m1:_ | intMapIsSubsetOf m0 m1}
-  -> {s:_ | consistentUnificationScopesSubst m0 s}
-  -> {consistentUnificationScopesSubst m1 s}
+  -> {s:_ | consistentScopesSubst m0 s}
+  -> {consistentScopesSubst m1 s}
 @-}
 lemmaConsistentSupersetSubst
   :: IntMap (Set Int) -> IntMap (Set Int) -> Subst Term -> ()
