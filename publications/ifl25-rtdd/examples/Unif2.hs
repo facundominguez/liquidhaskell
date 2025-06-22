@@ -484,6 +484,9 @@ unify s m (Eq t0 t1) = unifyEq s m t0 t1
 
 
 {-@
+// A termination metric that might help here and in unifyEq is counting the
+// amount of occurrences of free variables in Terms and in sustitutions.
+lazy substEq
 substEq
   :: s:_
   -> m:_
@@ -495,10 +498,11 @@ substEq :: Set Int -> IntMap (Set Int) -> Term -> Term -> Maybe [(Var, Term)]
 substEq _ _ (V i) t1 = Just [(i, t1)]
 substEq _ _ t0 (V i) = Just [(i, t0)]
 substEq s m (L t0) (L t1) = substEq s m t0 t1
-substEq s m (P t0a t0b) (P t1a t1b) =
-    -- TODO: apply the substitutions discovered in the first component to the
-    -- second component. Needs working on the refinement type signature of substitute.
-    (++) <$> substEq s m t0a t1a <*> substEq s m t0b t1b
+substEq s m (P t0a t0b) (P t1a t1b) = do
+    substT0a <- substEq s m t0a t1a
+    let ss = fromListSubst2 s m substT0a
+    substT0b <- substEq s m (substitute s m ss t0b) (substitute s m ss t1b)
+    return $ substT0a ++ substT0b
 substEq _ _ U U = Just []
 substEq _ _ SA{} _ = Just []
 substEq _ _ _ SA{} = Just []
