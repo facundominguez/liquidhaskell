@@ -158,7 +158,7 @@ fromSetIdSubst :: Set Int -> Subst Term
 fromSetIdSubst s = Subst [(i, V i) | i <- Set.toList s]
 
 -- BUG: Moving this definition to another module causes LH to complain that the
--- symbol skolemSet is undefined.
+-- symbol domain is undefined.
 {-@ opaque-reflect domain @-}
 {-@ ignore domain @-}
 domain :: Subst e -> Set Int
@@ -700,7 +700,9 @@ skip () = ()
 
 {-@
 unifyFormula
-  :: s:_ -> m:_ -> f:ConsistentScopedFormula s m -> Maybe [(Var, Term)]
+  :: s:_
+  -> {m:_ | Set.difference (IntMapSetInt_keys m) s = Set.empty}
+  -> f:ConsistentScopedFormula s m -> Maybe [(Var, Term)]
 @-}
 unifyFormula :: Set Int -> IntMap (Set Int) -> Formula -> Maybe [(Var, Term)]
 unifyFormula s m f =
@@ -713,7 +715,7 @@ unifyFormula s m f =
 ignore qvToScopes
 assume qvToScopes
   :: s:_
-  -> m:_
+  -> {m:_ | Set.difference (IntMapSetInt_keys m) s = Set.empty}
   -> {v:_ | intMapIsSubsetOf m v && isSubsetOf s (IntMapSetInt_keys v)}
 @-}
 qvToScopes :: Set Int -> IntMap (Set Int) -> IntMap (Set Int)
