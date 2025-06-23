@@ -293,6 +293,10 @@ substitute s m ss t = case t of
     P t1 t2 -> P (substitute s m ss t1) (substitute s m ss t2)
 
 {-@
+// Since composeSubst applies s0 to the range of s1, we require that
+// the free variables of s1 are in the domain of s0.
+// 
+// The domain of s1 should be unchanged in the result.
 ignore composeSubst
 assume composeSubst
   :: s:_
@@ -388,13 +392,11 @@ consistentScopesSubst m (Subst xs) =
     all (\(i, t) -> consistentScopesTerm m t) xs
 
 {-@
+// Another property we assume of sustitutions.
 assume castConsistentScopesSubst
   :: s:_
   -> m:_
-  -> {ss:_ |
-         consistentScopesSubst m ss
-      && isSubsetOf (freeVarsSubst ss) s
-     }
+  -> ss:ConsistentScopedSubst s m
   -> {v:Subst (ConsistentScopedTerm s m) | v = ss}
 @-}
 castConsistentScopesSubst
@@ -402,6 +404,8 @@ castConsistentScopesSubst
 castConsistentScopesSubst _ _ ss = ss
 
 {-@
+// Reciprocal of castConsistentScopesSubst, which is used to prove that
+// a substitution has consistent scopes if it range does.
 assume lemmaConsistentScopesSubst
   :: m:_
   -> ss:Subst {t:_ | consistentScopesTerm m t}
@@ -691,6 +695,8 @@ substituteSkolemsTerm s m t ss = case t of
     P t1 t2 -> P (substituteSkolemsTerm s m t1 ss) (substituteSkolemsTerm s m t2 ss)
 
 {-@
+// the postcondition should hold because the terms in the range of the
+// substitution are consistent with the same map of scopes.
 ignore substituteSkolemsSubst
 assume substituteSkolemsSubst
   :: s:_
@@ -789,6 +795,8 @@ lemmaConsistentSupersetTerm m0 m1 (P t0 t1) =
     ? lemmaConsistentSupersetTerm m0 m1 t1
 
 {-@
+// Should hold because the successful lookups on m0 should return the same
+// values as the successful lookups in m1, since m0 is a submap of m1.
 assume lemmaConsistentSupersetSubst
   :: m0:_
   -> {m1:_ | intMapIsSubsetOf m0 m1}
