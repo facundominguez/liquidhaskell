@@ -706,20 +706,20 @@ unifyFormula
 @-}
 unifyFormula :: Set Int -> IntMap (Set Int) -> Formula -> Maybe [(Var, Term)]
 unifyFormula s m f =
-    let m' = qvToScopes s m
+    let m' = addSToM s m
         skf = skolemize s f ? lemmaConsistentSuperset m m' f
         (f'', m'') = runState skf m'
      in unify s m'' f''
 
 {-@
-ignore qvToScopes
-assume qvToScopes
+ignore addSToM
+assume addSToM
   :: s:_
   -> {m:_ | Set.difference (IntMapSetInt_keys m) s = Set.empty}
   -> {v:_ | intMapIsSubsetOf m v && isSubsetOf s (IntMapSetInt_keys v)}
 @-}
-qvToScopes :: Set Int -> IntMap (Set Int) -> IntMap (Set Int)
-qvToScopes s m =
+addSToM :: Set Int -> IntMap (Set Int) -> IntMap (Set Int)
+addSToM s m =
     IntMap.union (IntMap.fromList [(i, s) | i <- Set.toList s]) m
 
 {-@
