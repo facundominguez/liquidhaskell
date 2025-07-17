@@ -22,9 +22,9 @@ import Language.Haskell.Liquid.ProofCombinators
 import State
 
 -- BUG: The verification time seems to be superlinear on the size of the
--- module at the moment. Unfortunately, name resolution issues still prevent a
--- convenient split. We keep here a list of functions whose checking we can
--- disable to reduce the verification time.
+-- module at the moment. Unfortunately, name resolution issues prevented a
+-- convenient split at the submission time. So we kept here a list of functions
+-- whose checking we can disable to reduce the verification time.
 {-@
 // ignore unify
 // ignore unifyEq
