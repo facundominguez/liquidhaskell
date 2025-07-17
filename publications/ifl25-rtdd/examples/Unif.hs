@@ -68,13 +68,6 @@ define intMapIsSubsetOf x y = IntMapSetInt_isSubsetOf x y
 intMapIsSubsetOf :: IntMap (Set Int) -> IntMap (Set Int) -> Bool
 intMapIsSubsetOf _ _ = undefined
 
-{-@ inline mid @-}
-mid :: IntMap (Set Int) -> IntMap (Set Int)
-mid m = m
-
-
-{-@ infixr ++ @-}
-
 -- | We have plain variables
 type Var = Int
 -- | And we have applications of skolem functions for existential variables that
