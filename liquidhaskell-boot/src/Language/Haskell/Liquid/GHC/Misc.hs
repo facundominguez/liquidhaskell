@@ -769,18 +769,20 @@ elabRnExpr rdr_expr = do
              tcInferRho rn_expr
 
     -- Generalise
+    -- The outputs of simplifyInfer are dead, but simplifyInfer has some side
+    -- effect that changes the desugaring of full_expr below. Without this
+    -- side effect, the desugaring of full_expr is missing some dictionary
+    -- bindings
     uniq <- newUnique
     let { fresh_it = itName uniq (getLocA rdr_expr) }
-    ((_qtvs, _dicts, evbs, _), residual)
-         <- captureConstraints $
-            simplifyInfer NotTopLevel tclvl NoRestrictions
+    (_qtvs, _dicts, evbs, _)
+         <- simplifyInfer NotTopLevel tclvl NoRestrictions
                           []    {- No sig vars -}
                           [(fresh_it, res_ty)]
                           lie
 
     -- Ignore the dictionary bindings
-    evbs' <- simplifyInteractive residual
-    full_expr <- zonkTopLExpr (mkHsDictLet (EvBinds evbs') (mkHsDictLet evbs tc_expr))
+    full_expr <- zonkTopLExpr (mkHsDictLet evbs tc_expr)
     (ds_msgs, me) <- initDsTc $ dsLExpr full_expr
 
     logger <- getLogger
@@ -793,7 +795,31 @@ elabRnExpr rdr_expr = do
       Just e -> do
         when (errorsOrFatalWarningsFound ds_msgs)
           failM
-        return e
+        return $ fst $ Ghc.collectArgs $ inlineEvidenceLets e
+
+inlineEvidenceLets :: CoreExpr -> CoreExpr
+inlineEvidenceLets = go
+  where
+    go (Let (NonRec x rhs) body)
+      | isEvidenceVar x = substCoreVar x (go rhs) (go body)
+      | otherwise = Let (NonRec x (go rhs)) (go body)
+    go (Let (Rec xes) body) = Let (Rec [(x, go rhs) | (x, rhs) <- xes]) (go body)
+    go (Lam x e) = Lam x (go e)
+    go (App e1 e2) = App (go e1) (go e2)
+    go (Case e x t alts) = Case (go e) x t [Alt c xs (go rhs) | Alt c xs rhs <- alts]
+    go (Cast e co) = Cast (go e) co
+    go (Tick tick e) = Tick tick (go e)
+    go e = e
+
+isEvidenceVar :: Var -> Bool
+isEvidenceVar x = isDictonaryId x || isEvVar x
+
+substCoreVar :: Id -> CoreExpr -> CoreExpr -> CoreExpr
+substCoreVar x rhs body =
+  substExpr subs body
+  where
+    fvs = exprFreeVars rhs `unionVarSet` exprFreeVars body
+    subs = extendIdSubst (mkEmptySubst (mkInScopeSet fvs)) x rhs
 
 newtype HashableType = HashableType {getHType :: Type}
 
