@@ -90,10 +90,6 @@ compileClasses src env (name, spec) rest =
   methods = [ makeGHCLHNameLocatedFromId x | (_, xs) <- instmethods, x <- xs ]
       -- instance methods
 
-  mkSymbol x
-    | Ghc.isDictonaryId x = F.mappendSym "$" (F.dropSym 2 $ GM.simplesymbol x)
-    | otherwise           = F.dropSym 2 $ GM.simplesymbol x
-
   instmethods :: [(Ghc.ClsInst, [Ghc.Var])]
   instmethods =
     [ (inst, ms)
@@ -350,7 +346,7 @@ makeClassAuxTypes ::
   -> [F.Located DataConP]
   -> [(Ghc.ClsInst, [Ghc.Var])]
   -> Ghc.TcRn [(Ghc.Var, LocSpecType)]
-makeClassAuxTypes elab dcps xs = Misc.concatMapM (makeClassAuxTypesOne elab) dcpInstMethods
+makeClassAuxTypes elab dcps xs = Misc.concatMapM (makeClassAuxTypesOne elab auxEnv) dcpInstMethods
   where
     dcpInstMethods = do
       dcp <- dcps
@@ -361,12 +357,28 @@ makeClassAuxTypes elab dcps xs = Misc.concatMapM (makeClassAuxTypesOne elab) dcp
       guard $ dc == dc'
       pure (dcp, inst, methods)
 
+    auxEnv :: M.HashMap F.Symbol (M.HashMap F.Symbol F.Symbol)
+    auxEnv = M.fromList [(dfunSym inst, auxMap inst methods) | (inst, methods) <- xs]
+
+    dfunSym :: Ghc.ClsInst -> F.Symbol
+    dfunSym = F.val . GM.namedLocSymbol . Ghc.instanceDFunId
+
+    auxMap :: Ghc.ClsInst -> [Ghc.Var] -> M.HashMap F.Symbol F.Symbol
+    auxMap inst methods =
+      M.fromList
+        [ (F.symbol sel, F.symbol method)
+        | sel <- Ghc.classAllSelIds (Ghc.is_cls inst)
+        , method <- methods
+        , GM.dropModuleNames (F.symbol sel) == mkSymbol method
+        ]
+
 makeClassAuxTypesOne ::
      (SpecType -> Ghc.TcRn SpecType)
+  -> M.HashMap F.Symbol (M.HashMap F.Symbol F.Symbol)
   -> (F.Located DataConP, Ghc.ClsInst, [Ghc.Var])
   -> Ghc.TcRn [(Ghc.Var, LocSpecType)]
-makeClassAuxTypesOne elab (ldcp, inst, methods) =
-  forM methods $ \method -> do
+makeClassAuxTypesOne elab auxEnv (ldcp, inst, methods) = do
+  methodSigs <- forM methodsToSpec $ \method -> do
     let (headlessSig, preft) =
           case L.lookup (mkSymbol method) yts' of
             Nothing ->
@@ -385,7 +397,7 @@ makeClassAuxTypesOne elab (ldcp, inst, methods) =
           headlessSig
     elaboratedSig  <- flip addCoherenceOblig preft <$> elab fullSig
 
-    let retSig =  mapExprReft (\_ -> substAuxMethod dfunSym methodsSet) (F.notracepp ("elaborated" ++ GM.showPpr method) elaboratedSig)
+    let retSig = mapExprReft (\_ -> substAuxMethods auxEnv) (F.notracepp ("elaborated" ++ GM.showPpr method) elaboratedSig)
     let tysub  = F.notracepp "tysub" $ M.fromList $ zip (F.notracepp "newtype-vars" $ RT.allTyVars' (F.notracepp "new-type" retSig)) (F.notracepp "ghc-type-vars" (RT.allTyVars' ((F.notracepp "ghc-type" $ RT.ofType (Ghc.varType method)) :: SpecType)))
         cosub  = M.fromList [ (F.symbol a, F.fObj (GM.namedLocSymbol b)) |  (a,RTV b) <- M.toList tysub]
         tysubf x = F.notracepp ("cosub:" ++ F.showpp cosub) $ M.lookupDefault x x tysub
@@ -394,6 +406,8 @@ makeClassAuxTypesOne elab (ldcp, inst, methods) =
     -- need to make the variable names consistent
     pure (method, F.dummyLoc (F.notracepp ("vars:" ++ F.showpp (F.symbol <$> RT.allTyVars' subbedTy)) subbedTy))
 
+  let scSigs = [(scAux, F.dummyLoc (scAuxSpec scAux)) | scAux <- scAuxs]
+  pure (scSigs ++ methodSigs)
   -- "is" is used as a shorthand for instance, following the convention of the Ghc api
   where
     -- recsel = F.symbol ("lq$recsel" :: String)
@@ -410,52 +424,74 @@ makeClassAuxTypesOne elab (ldcp, inst, methods) =
             res  = ty_res rrep    -- (Monoid.mappend -> $cmappend##Int, ...)
     -- core rewriting mark2: do the same thing except they don't have to be symbols
     -- YL: poorly written. use a comprehension instead of assuming
-    methodsSet = F.notracepp "methodSet" $ M.fromList (zip (F.symbol <$> clsMethods) (F.symbol <$> methods))
     -- core rewriting mark1: dfunId
     -- ()
     dfunSymL = GM.namedLocSymbol $ Ghc.instanceDFunId inst
-    dfunSym = F.val dfunSymL
     (isTvs, isPredTys, _, isTys) = Ghc.instanceSig inst
     isSpecTys = RT.ofType <$> isTys
     isPredSpecTys = RT.ofType <$> isPredTys
     isRTvs = makeRTVar . RT.rTyVar <$> isTvs
     dcp = F.val ldcp
     -- Monoid.mappend, ...
-    clsMethods = filter (\x -> GM.dropModuleNames (F.symbol x) `elem` fmap mkSymbol methods) $
-      Ghc.classAllSelIds (Ghc.is_cls inst)
     yts = [(lhNameToUnqualifiedSymbol y, t) | (y, t) <- dcpTyArgs dcp]
-    mkSymbol x
-      | -- F.notracepp ("isDictonaryId:" ++ GM.showPpr x) $
-        Ghc.isDictonaryId x = F.mappendSym "$" (F.dropSym 2 $ GM.simplesymbol x)
-      | otherwise = F.dropSym 2 $ GM.simplesymbol x
-        -- res = dcpTyRes dcp
     clsTvs = dcpFreeTyVars dcp
         -- copy/pasted from Bare/Class.hs
     subst [] t = t
     subst ((a, ta):su) t = RT.subsTyVarMeet' (a, ta) (subst su t)
 
-substAuxMethod :: F.Symbol -> M.HashMap F.Symbol F.Symbol -> F.Expr -> F.Expr
-substAuxMethod dfun methods = F.notracepp "substAuxMethod" . go
-  where go :: F.Expr -> F.Expr
-        go (F.EApp e0 e1)
-          | F.EVar x <- F.notracepp "e0" e0
-          , (F.EVar dfun_mb, args)  <- F.splitEApp e1
-          , dfun_mb == dfun
-          , Just method <- M.lookup x methods
-              -- Before: Functor.fmap ($p1Applicative $dFunctor)
-              -- After: Funcctor.fmap ($p1Applicative##GHC.Base.Applicative)
-           = F.eApps (F.EVar method) args
-          | otherwise
-          = F.EApp (go e0) (go e1)
-        go (F.ENeg e) = F.ENeg (go e)
-        go (F.EBin bop e0 e1) = F.EBin bop (go e0) (go e1)
-        go (F.EIte e0 e1 e2) = F.EIte (go e0) (go e1) (go e2)
-        go (F.ECst e0 s) = F.ECst (go e0) s
-        go (F.ELam (x, t) body) = F.ELam (x, t) (go body)
-        go (F.PAnd es) = F.PAnd (go <$> es)
-        go (F.POr es) = F.POr (go <$> es)
-        go (F.PNot e) = F.PNot (go e)
-        go (F.PImp e0 e1) = F.PImp (go e0) (go e1)
-        go (F.PIff e0 e1) = F.PIff (go e0) (go e1)
-        go (F.PAtom brel e0 e1) = F.PAtom brel (go e0) (go e1)
-        go e = F.notracepp "LEAF" e
+    methodsToSpec :: [Ghc.Var]
+    methodsToSpec = filter ((`S.member` classOpKeys) . mkSymbol) methods
+
+    classOpKeys :: S.HashSet F.Symbol
+    classOpKeys =
+      S.fromList
+        [ GM.dropModuleNames (F.symbol v)
+        | (v, _) <- Ghc.classOpItems (Ghc.is_cls inst)
+        ]
+
+    scAuxs :: [Ghc.Var]
+    scAuxs = filter ((`S.member` scSelKeys) . mkSymbol) methods
+
+    scSelKeys :: S.HashSet F.Symbol
+    scSelKeys =
+      S.fromList
+        [ GM.dropModuleNames (F.symbol v)
+        | v <- Ghc.classSCSelIds (Ghc.is_cls inst)
+        ]
+
+    scAuxSpec :: Ghc.Var -> SpecType
+    scAuxSpec v = classRFInfoType True (RT.ofType (Ghc.varType v) :: SpecType)
+
+substAuxMethods
+  :: M.HashMap F.Symbol (M.HashMap F.Symbol F.Symbol)
+  -> F.Expr
+  -> F.Expr
+substAuxMethods auxEnv = go
+  where
+    go (F.EApp e0 e1)
+      | F.EVar clsOp <- e0
+      , (F.EVar dfun, args) <- F.splitEApp e1
+      , Just methodMap <- M.lookup dfun auxEnv
+      , Just aux <- M.lookup clsOp methodMap = F.eApps (F.EVar aux) args
+      | otherwise = F.EApp (go e0) (go e1)
+    go (F.ENeg e) = F.ENeg (go e)
+    go (F.EBin bop e0 e1) = F.EBin bop (go e0) (go e1)
+    go (F.EIte e0 e1 e2) = F.EIte (go e0) (go e1) (go e2)
+    go (F.ECst e s) = F.ECst (go e) s
+    go (F.ELam (x, t) body) = F.ELam (x, t) (go body)
+    go (F.PAnd es) = F.PAnd (go <$> es)
+    go (F.POr es) = F.POr (go <$> es)
+    go (F.PNot e) = F.PNot (go e)
+    go (F.PImp e0 e1) = F.PImp (go e0) (go e1)
+    go (F.PIff e0 e1) = F.PIff (go e0) (go e1)
+    go (F.PAtom brel e0 e1) = F.PAtom brel (go e0) (go e1)
+    go e = e
+
+mkSymbol :: Ghc.Var -> F.Symbol
+mkSymbol x =
+  case Ghc.getOccString x of
+    '$' : 'c' : 'p' : rest -> F.symbol ('$' : 'p' : rest)
+    '$' : 'c' : rest       -> F.symbol rest
+    occ
+      | Ghc.isDictonaryId x -> F.mappendSym "$" (F.dropSym 2 (F.symbol occ))
+      | otherwise           -> F.symbol occ
