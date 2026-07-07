@@ -2689,11 +2689,11 @@ executable typeclass-pos
 
     -- Fails on GHC 9.0.1
     other-modules:
+                  --   All
                     Basic
+                  , BasicImport
                   , Lib
                   , SemigroupLib
-                  , BasicImport
-                  --   All
                   , Lemma
                   , PNat
 
