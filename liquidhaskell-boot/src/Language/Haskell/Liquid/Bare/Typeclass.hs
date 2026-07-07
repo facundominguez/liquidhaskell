@@ -44,7 +44,6 @@ import qualified Language.Haskell.Liquid.Bare.Resolve
 import qualified Language.Haskell.Liquid.Measure
                                                as Ms
 import qualified Data.HashMap.Strict           as M
-import qualified GHC.Types.Id as GHC (isClassOpId)
 
 
 
@@ -367,7 +366,7 @@ makeClassAuxTypesOne ::
   -> (F.Located DataConP, Ghc.ClsInst, [Ghc.Var])
   -> Ghc.TcRn [(Ghc.Var, LocSpecType)]
 makeClassAuxTypesOne elab (ldcp, inst, methods) =
-  forM (filter GHC.isClassOpId methods) $ \method -> do
+  forM methods $ \method -> do
     let (headlessSig, preft) =
           case L.lookup (mkSymbol method) yts' of
             Nothing ->
