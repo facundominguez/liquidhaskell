@@ -8,16 +8,16 @@
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
       
-        <meta name="author" content="Niki Vazou">
+        <meta name="author" content="Facundo Domínguez">
       
       
-        <link rel="canonical" href="https://ucsd-progsys.github.io/liquidhaskell/blogposts/2013-12-09-checking-termination.lhs/">
+        <link rel="canonical" href="https://ucsd-progsys.github.io/liquidhaskell/blogposts/2025-03-20-lh-release/">
       
       
-        <link rel="prev" href="../2013-12-14-gcd.lhs/">
+        <link rel="prev" href="../../papers/">
       
       
-        <link rel="next" href="../2013-12-02-getting-to-the-bottom.lhs/">
+        <link rel="next" href="../2020-08-20-lh-as-a-ghc-plugin.lhs/">
       
       
         
@@ -28,7 +28,7 @@
     
     
       
-        <title>Checking Termination - LiquidHaskell Docs</title>
+        <title>A hundred pull requests for Liquid Haskell - LiquidHaskell Docs</title>
       
     
     
@@ -83,7 +83,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#looping-over-vectors" class="md-skip">
+        <a href="#reflection-improvements" class="md-skip">
           Skip to content
         </a>
       
@@ -116,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Checking Termination
+              A hundred pull requests for Liquid Haskell
             
           </span>
         </div>
@@ -328,7 +328,7 @@
     
     
       <li class="md-tabs__item md-tabs__item--active">
-        <a href="../2025-03-20-lh-release/" class="md-tabs__link">
+        <a href="./" class="md-tabs__link">
           
   
   
@@ -660,10 +660,35 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../2025-03-20-lh-release/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    A hundred pull requests for Liquid Haskell
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -679,6 +704,90 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#reflection-improvements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reflection improvements
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reasoning-and-reflection-of-lambdas" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reasoning and reflection of lambdas
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#integration-with-ghc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Integration with GHC
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cvc5-support" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        cvc5 support
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#name-resolution-overhaul" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Name resolution overhaul
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-road-ahead" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The road ahead
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1136,35 +1245,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Checking Termination
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../2013-12-09-checking-termination.lhs/" class="md-nav__link">
         
   
   
@@ -1180,68 +1264,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#looping-over-vectors" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Looping Over Vectors
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#proving-termination-by-handwaving" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Proving Termination By Hand(waving)
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#proving-termination-by-types" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Proving Termination By Types
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#choosing-the-correct-argument" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Choosing the Correct Argument
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1707,10 +1729,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#looping-over-vectors" class="md-nav__link">
+  <a href="#reflection-improvements" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Looping Over Vectors
+        Reflection improvements
       
     </span>
   </a>
@@ -1718,10 +1740,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#proving-termination-by-handwaving" class="md-nav__link">
+  <a href="#reasoning-and-reflection-of-lambdas" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Proving Termination By Hand(waving)
+        Reasoning and reflection of lambdas
       
     </span>
   </a>
@@ -1729,10 +1751,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#proving-termination-by-types" class="md-nav__link">
+  <a href="#integration-with-ghc" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Proving Termination By Types
+        Integration with GHC
       
     </span>
   </a>
@@ -1740,10 +1762,32 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#choosing-the-correct-argument" class="md-nav__link">
+  <a href="#cvc5-support" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Choosing the Correct Argument
+        cvc5 support
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#name-resolution-overhaul" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Name resolution overhaul
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-road-ahead" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The road ahead
       
     </span>
   </a>
@@ -1773,7 +1817,7 @@
       
       
       
-        <a href="../../tags/#tag:termination" class="md-tag">termination</a>
+        <a href="../../tags/#tag:announcement" class="md-tag">announcement</a>
       
     
   </nav>
@@ -1783,151 +1827,103 @@
   
 
 
-  <h1>Checking Termination</h1>
+  <h1>A hundred pull requests for Liquid Haskell</h1>
 
-<p>As explained in the <a href="../2013-11-23-telling_lies.lhs/">last</a> <a href="../2013-12-02-getting-to-the-bottom.lhs/">two</a> posts, we need a termination
-checker to ensure that LiquidHaskell is not tricked by divergent, lazy
-computations into telling lies. Happily, it turns out that with very 
-little retrofitting, and a bit of jiu jitsu, we can use refinements 
-themselves to prove termination!</p>
-<!-- more -->
-
-<p><br></p>
-<div class="row-fluid">
-   <div class="span12 pagination-centered">
-   <p style="text-align:center">
-   <img class="center-block" src="../../static/img/falling.jpg" alt="Falling Down" width="300">
-       <br>
-       How do you prove this fellow will stop falling?
-       <br>
-   </p>
-   </div>
-</div>
-
-<pre><span class=hs-linenum>38: </span><span class='hs-keyword'>module</span> <span class='hs-conid'>Termination</span> <span class='hs-keyword'>where</span>
-<span class=hs-linenum>39: </span>
-<span class=hs-linenum>40: </span><span class='hs-keyword'>import</span> <span class='hs-conid'>Prelude</span>     <span class='hs-varid'>hiding</span> <span class='hs-layout'>(</span><span class='hs-varid'>sum</span><span class='hs-layout'>)</span>
-<span class=hs-linenum>41: </span><span class='hs-keyword'>import</span> <span class='hs-conid'>Data</span><span class='hs-varop'>.</span><span class='hs-conid'>Vector</span> <span class='hs-varid'>hiding</span> <span class='hs-layout'>(</span><span class='hs-varid'>sum</span><span class='hs-layout'>)</span>
-</pre>
-
-<p>Lets first see how LiquidHaskell proves termination on simple 
-recursive functions, and then later, we'll see how to look at 
-fancier cases.</p>
-<h2 id="looping-over-vectors">Looping Over Vectors<a class="headerlink" href="#looping-over-vectors" title="Permanent link">&para;</a></h2>
-<p>Lets write a bunch of little functions that operate on 1-dimensional vectors</p>
-<pre><span class=hs-linenum>54: </span><span class='hs-keyword'>type</span> <span class='hs-conid'>Val</span> <span class='hs-keyglyph'>=</span> <span class='hs-conid'>Int</span>
-<span class=hs-linenum>55: </span><span class='hs-keyword'>type</span> <span class='hs-conid'>Vec</span> <span class='hs-keyglyph'>=</span> <span class='hs-conid'>Vector</span> <span class='hs-conid'>Val</span>
-</pre>
-
-<p>Next, lets write a simple recursive function that loops over to add up
-the first <code>n</code> elements of a vector:</p>
-<pre><span class=hs-linenum>62: </span><span class='hs-definition'>sum</span>     <span class='hs-keyglyph'>::</span> <span class='hs-conid'>Vec</span> <span class='hs-keyglyph'>-&gt;</span> <span class='hs-conid'>Int</span> <span class='hs-keyglyph'>-&gt;</span> <span class='hs-conid'>Val</span>
-<span class=hs-linenum>63: </span><a class=annot href="#"><span class=annottext>x1:(Data.Vector.Vector (GHC.Types.Int))
--&gt; {VV : (GHC.Types.Int) | (VV &gt;= 0) &amp;&amp; (VV &lt; (vlen x1))}
--&gt; (GHC.Types.Int)</span><span class='hs-definition'>sum</span></a> <a class=annot href="#"><span class=annottext>(Data.Vector.Vector (GHC.Types.Int))</span><span class='hs-varid'>a</span></a> <span class='hs-num'>0</span> <span class='hs-keyglyph'>=</span> <a class=annot href="#"><span class=annottext>x1:(GHC.Prim.Int#) -&gt; {VV : (GHC.Types.Int) | (VV == (x1  :  int))}</span><span class='hs-num'>0</span></a>
-<span class=hs-linenum>64: </span><span class='hs-definition'>sum</span> <span class='hs-varid'>a</span> <span class='hs-varid'>n</span> <span class='hs-keyglyph'>=</span> <span class='hs-layout'>(</span><a class=annot href="#"><span class=annottext>{VV : (Data.Vector.Vector (GHC.Types.Int)) | (VV == a) &amp;&amp; ((vlen VV) &gt;= 0)}</span><span class='hs-varid'>a</span></a> <a class=annot href="#"><span class=annottext>x1:(Data.Vector.Vector (GHC.Types.Int))
--&gt; {VV : (GHC.Types.Int) | (VV &lt; (vlen x1)) &amp;&amp; (0 &lt;= VV)}
--&gt; (GHC.Types.Int)</span><span class='hs-varop'>!</span></a> <span class='hs-layout'>(</span><a class=annot href="#"><span class=annottext>{VV : (GHC.Types.Int) | (VV &gt;= 0) &amp;&amp; (VV &lt; (vlen a))}</span><span class='hs-varid'>n</span></a><a class=annot href="#"><span class=annottext>x1:(GHC.Types.Int)
--&gt; x2:(GHC.Types.Int) -&gt; {VV : (GHC.Types.Int) | (VV == (x1 - x2))}</span><span class='hs-comment'>-</span></a><a class=annot href="#"><span class=annottext>{VV : (GHC.Types.Int) | (VV == (1  :  int))}</span><span class='hs-num'>1</span></a><span class='hs-layout'>)</span><span class='hs-layout'>)</span> <a class=annot href="#"><span class=annottext>x1:(GHC.Types.Int)
--&gt; x2:(GHC.Types.Int) -&gt; {VV : (GHC.Types.Int) | (VV == (x1 + x2))}</span><span class='hs-varop'>+</span></a> <a class=annot href="#"><span class=annottext>x1:(Data.Vector.Vector (GHC.Types.Int))
--&gt; {VV : (GHC.Types.Int) | (VV &gt;= 0) &amp;&amp; (VV &lt; (vlen x1))}
--&gt; (GHC.Types.Int)</span><span class='hs-varid'>sum</span></a> <a class=annot href="#"><span class=annottext>{VV : (Data.Vector.Vector (GHC.Types.Int)) | (VV == a) &amp;&amp; ((vlen VV) &gt;= 0)}</span><span class='hs-varid'>a</span></a> <span class='hs-layout'>(</span><a class=annot href="#"><span class=annottext>{VV : (GHC.Types.Int) | (VV &gt;= 0) &amp;&amp; (VV &lt; (vlen a))}</span><span class='hs-varid'>n</span></a><a class=annot href="#"><span class=annottext>x1:(GHC.Types.Int)
--&gt; x2:(GHC.Types.Int) -&gt; {VV : (GHC.Types.Int) | (VV == (x1 - x2))}</span><span class='hs-comment'>-</span></a><a class=annot href="#"><span class=annottext>{VV : (GHC.Types.Int) | (VV == (1  :  int))}</span><span class='hs-num'>1</span></a><span class='hs-layout'>)</span>
-</pre>
-
-<h2 id="proving-termination-by-handwaving">Proving Termination By Hand(waving)<a class="headerlink" href="#proving-termination-by-handwaving" title="Permanent link">&para;</a></h2>
-<p>Does <code>sum</code> terminate? </p>
-<p>First off, it is apparent that if we call <code>sum</code> with a
-negative <code>n</code> then it <strong>will not</strong> terminate. 
-Thus, we should only call <code>sum</code> with non-negative integers.</p>
-<p>Fine, lets assume <code>n</code> is non-negative. Why then does it terminate?</p>
-<p>Intuitively,</p>
-<ol>
-<li>
-<p>If <code>n</code> is <code>0</code> then it trivially returns with the value <code>0</code>.</p>
-</li>
-<li>
-<p>If <code>n</code> is non-zero, then we recurse <em>but</em> with a strictly smaller <code>n</code> ...</p>
-</li>
-<li>
-<p>... but ultimately hit <code>0</code> at which point it terminates.</p>
-</li>
-</ol>
-<p>Thus we can, somewhat more formally, prove termination by induction on <code>n</code>. </p>
-<p><strong>Base Case</strong> <code>n == 0</code> The function clearly terminates for the base case input of <code>0</code>.</p>
-<p><strong>Inductive Hypothesis</strong> Lets assume that <code>sum</code> terminates on all <code>0 &lt;= k &lt; n</code>.</p>
-<p><strong>Inductive Step</strong> Prove that <code>sum n</code> only recursively invokes <code>sum</code> with values that
-satisfy the inductive hypothesis and hence, which terminate.</p>
-<p>This reasoning suffices to convince ourselves that <code>sum i</code> terminates for 
-every natural number <code>i</code>. That is, we have shown that <code>sum</code> terminates 
-because a <em>well-founded metric</em> (i.e., the natural number <code>i</code>) is decreasing 
-at each recursive call.</p>
-<h2 id="proving-termination-by-types">Proving Termination By Types<a class="headerlink" href="#proving-termination-by-types" title="Permanent link">&para;</a></h2>
-<p>We can teach LiquidHaskell to prove termination by applying the same reasoning 
-as above, by rephrasing it in terms of refinement types.</p>
-<p>First, we specify that the input is restricted to the set of <code>Nat</code>ural numbers</p>
-<pre><span class=hs-linenum>109: </span><span class='hs-keyword'>{-@</span> <span class='hs-varid'>sum</span> <span class='hs-keyglyph'>::</span> <span class='hs-varid'>a</span><span class='hs-conop'>:</span><span class='hs-conid'>Vec</span> <span class='hs-keyglyph'>-&gt;</span> <span class='hs-keyword'>{v:</span><span class='hs-conid'>Nat</span> <span class='hs-keyword'>| v &lt; (vlen a)}</span> <span class='hs-keyglyph'>-&gt;</span> <span class='hs-conid'>Val</span> <span class='hs-keyword'>@-}</span>
-</pre>
-
-<p>where recall that <code>Nat</code> is just the refinement type <code>{v:Int | v &gt;= 0}</code>.</p>
-<p>Second, we typecheck the <em>body</em> of <code>sum</code> under an environment that
-restricts <code>sum</code> to only be called on inputs less than <code>n</code>, i.e. using
-an environment:</p>
-<ul>
-<li><code>a   :: Vec</code></li>
-<li><code>n   :: Nat</code></li>
-<li><code>sum :: Vec -&gt; n':{v:Nat | v &lt; n} -&gt; Val</code></li>
-</ul>
-<p>This ensures that any (recursive) call in the body only calls <code>sum</code> 
-with inputs smaller than the current parameter <code>n</code>. Since its body 
-typechecks in this environment, i.e. <code>sum</code> is called with <code>n-1</code> which 
-is smaller than <code>n</code> and, in this case, a <code>Nat</code>, LiquidHaskell proves 
-that sum terminates for all <code>n</code>.</p>
-<p>For those keeping track at home, this is the technique of 
-<a href="http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.124.5589">sized types</a>, 
-, expressed using refinements. Sized types themselves are an instance of 
-the classical method of proving termination via well founded metrics that 
-goes back, at least, to <a href="http://www.turingarchive.org/viewer/?id=462&amp;title=01b">Turing</a>.</p>
-<h2 id="choosing-the-correct-argument">Choosing the Correct Argument<a class="headerlink" href="#choosing-the-correct-argument" title="Permanent link">&para;</a></h2>
-<p>The example above is quite straightforward, and you might well wonder if this
-method works well for ``real-world" programs. With a few generalizations
-and extensions, and by judiciously using the wealth of information captured in
-refinement types, the answer is an emphatic, yes!</p>
-<p>Lets see one extension today.</p>
-<p>We saw that liquidHaskell can happily check that some Natural number is decreasing
-at each iteration, but it uses a na&#239;ve heuristic to choose which one -- for
-now, assume that it always chooses <em>the first</em> <code>Int</code> parameter.</p>
-<p>As you might imagine, this is quite simpleminded. </p>
-<p>Consider, a tail-recursive implementation of <code>sum</code>:</p>
-<pre><span class=hs-linenum>153: </span><span class='hs-keyword'>{-@</span> <span class='hs-varid'>sum'</span> <span class='hs-keyglyph'>::</span> <span class='hs-varid'>a</span><span class='hs-conop'>:</span><span class='hs-conid'>Vec</span> <span class='hs-keyglyph'>-&gt;</span> <span class='hs-conid'>Val</span> <span class='hs-keyglyph'>-&gt;</span> <span class='hs-keyword'>{v:</span><span class='hs-conid'>Nat</span><span class='hs-keyword'>| v &lt; (vlen a)}</span> <span class='hs-keyglyph'>-&gt;</span> <span class='hs-conid'>Val</span> <span class='hs-keyword'>@-}</span>
-<span class=hs-linenum>154: </span><span class='hs-definition'>sum'</span> <span class='hs-keyglyph'>::</span> <span class='hs-conid'>Vec</span> <span class='hs-keyglyph'>-&gt;</span> <span class='hs-conid'>Val</span> <span class='hs-keyglyph'>-&gt;</span> <span class='hs-conid'>Int</span> <span class='hs-keyglyph'>-&gt;</span> <span class='hs-conid'>Val</span>
-<span class=hs-linenum>155: </span><a class=annot href="#"><span class=annottext>x1:(Data.Vector.Vector (GHC.Types.Int))
--&gt; (GHC.Types.Int)
--&gt; {VV : (GHC.Types.Int) | (VV &gt;= 0) &amp;&amp; (VV &lt; (vlen x1))}
--&gt; (GHC.Types.Int)</span><span class='hs-definition'>sum'</span></a> <a class=annot href="#"><span class=annottext>(Data.Vector.Vector (GHC.Types.Int))</span><span class='hs-varid'>a</span></a> <a class=annot href="#"><span class=annottext>(GHC.Types.Int)</span><span class='hs-varid'>acc</span></a> <span class='hs-num'>0</span> <span class='hs-keyglyph'>=</span> <a class=annot href="#"><span class=annottext>{VV : (GHC.Types.Int) | (VV == acc)}</span><span class='hs-varid'>acc</span></a> <a class=annot href="#"><span class=annottext>x1:(GHC.Types.Int)
--&gt; x2:(GHC.Types.Int) -&gt; {VV : (GHC.Types.Int) | (VV == (x1 + x2))}</span><span class='hs-varop'>+</span></a> <a class=annot href="#"><span class=annottext>{VV : (Data.Vector.Vector (GHC.Types.Int)) | (VV == a) &amp;&amp; ((vlen VV) &gt;= 0)}</span><span class='hs-varid'>a</span></a><a class=annot href="#"><span class=annottext>x1:(Data.Vector.Vector (GHC.Types.Int))
--&gt; {VV : (GHC.Types.Int) | (VV &lt; (vlen x1)) &amp;&amp; (0 &lt;= VV)}
--&gt; (GHC.Types.Int)</span><span class='hs-varop'>!</span></a><a class=annot href="#"><span class=annottext>{VV : (GHC.Types.Int) | (VV == (0  :  int))}</span><span class='hs-num'>0</span></a> 
-<span class=hs-linenum>156: </span><span class='hs-definition'>sum'</span> <span class='hs-varid'>a</span> <span class='hs-varid'>acc</span> <span class='hs-varid'>n</span> <span class='hs-keyglyph'>=</span> <a class=annot href="#"><span class=annottext>x1:(Data.Vector.Vector (GHC.Types.Int))
--&gt; (GHC.Types.Int)
--&gt; {VV : (GHC.Types.Int) | (VV &gt;= 0) &amp;&amp; (VV &lt; (vlen x1))}
--&gt; (GHC.Types.Int)</span><span class='hs-varid'>sum'</span></a> <a class=annot href="#"><span class=annottext>{VV : (Data.Vector.Vector (GHC.Types.Int)) | (VV == a) &amp;&amp; ((vlen VV) &gt;= 0)}</span><span class='hs-varid'>a</span></a> <span class='hs-layout'>(</span><span class=hs-error><a class=annot href="#"><span class=annottext>{VV : (GHC.Types.Int) | (VV == acc)}</span><span class='hs-varid'>acc</span></a></span><span class=hs-error> </span><span class=hs-error><a class=annot href="#"><span class=annottext>x1:(GHC.Types.Int)
--&gt; x2:(GHC.Types.Int) -&gt; {VV : (GHC.Types.Int) | (VV == (x1 + x2))}</span><span class='hs-varop'>+</span></a></span><span class=hs-error> </span><span class=hs-error><a class=annot href="#"><span class=annottext>{VV : (Data.Vector.Vector (GHC.Types.Int)) | (VV == a) &amp;&amp; ((vlen VV) &gt;= 0)}</span><span class='hs-varid'>a</span></a></span><span class=hs-error><a class=annot href="#"><span class=annottext>x1:(Data.Vector.Vector (GHC.Types.Int))
--&gt; {VV : (GHC.Types.Int) | (VV &lt; (vlen x1)) &amp;&amp; (0 &lt;= VV)}
--&gt; (GHC.Types.Int)</span><span class='hs-varop'>!</span></a></span><span class=hs-error><a class=annot href="#"><span class=annottext>{VV : (GHC.Types.Int) | (VV &gt;= 0) &amp;&amp; (VV &lt; (vlen a))}</span><span class='hs-varid'>n</span></a></span><span class='hs-layout'>)</span> <span class='hs-layout'>(</span><a class=annot href="#"><span class=annottext>{VV : (GHC.Types.Int) | (VV &gt;= 0) &amp;&amp; (VV &lt; (vlen a))}</span><span class='hs-varid'>n</span></a><a class=annot href="#"><span class=annottext>x1:(GHC.Types.Int)
--&gt; x2:(GHC.Types.Int) -&gt; {VV : (GHC.Types.Int) | (VV == (x1 - x2))}</span><span class='hs-comment'>-</span></a><a class=annot href="#"><span class=annottext>{VV : (GHC.Types.Int) | (VV == (1  :  int))}</span><span class='hs-num'>1</span></a><span class='hs-layout'>)</span>
-</pre>
-
-<p>Clearly, the proof fails as liquidHaskell wants to prove that the <code>acc</code>umulator 
-is a <code>Nat</code>ural number that decreases at each iteration, neither of which may be
-true.</p>
-<p>The remedy is easy. We can point liquidHaskell to the correct argument <code>n</code> using a <code>Decrease</code> annotation: </p>
-<pre><span class=hs-linenum>164: </span><span class='hs-keyword'>{-@</span> <span class='hs-conid'>Decrease</span> <span class='hs-varid'>sum'</span> <span class='hs-num'>3</span> <span class='hs-keyword'>@-}</span>
-</pre>
-<p>which directs liquidHaskell to verify that the <em>third</em> argument (i.e., <code>n</code>) is decreasing. 
-With this hint, liquidHaskell will happily verify that <code>sum'</code> is indeed a terminating function.</p>
-<p>Thats all for now, next time we'll see how the basic technique can be extended
-to a variety of real-world settings.</p>
+<p>A <a href="https://hackage.haskell.org/package/liquidhaskell-0.9.10.1.2">new release</a> of Liquid Haskell is out after quite an active period of
+development with <a href="https://github.com/ucsd-progsys/liquidhaskell/pulls?q=is%3Apr+is%3Aclosed+merged%3A2024-08-31..2025-03-06">99 pull requests</a> in the <code>liquidhaskell</code> repository, and
+<a href="https://github.com/ucsd-progsys/liquid-fixpoint/pulls?q=is%3Apr+is%3Aclosed+merged%3A2024-08-31..2025-03-06">29 pull requests</a> in the <code>liquid-fixpoint</code> repository from about ten contributors.
+This post, originally posted in the <a href="https://www.tweag.io/blog/2025-03-20-lh-release/">Tweag blog</a>, is to provide an overview of the changes that made it into the latest release.</p>
+<p>There were contributions to the reflection and proof mechanisms; we got
+contributions to the integration with GHC; the support of <a href="https://cvc5.github.io/">cvc5</a> was improved
+when dealing with sets, bags, and maps; and there was a rather <a href="https://www.tweag.io/blog/2025-02-06-refactoring-lh/">large overhaul</a>
+of the name resolution mechanism.</p>
+<h2 id="reflection-improvements">Reflection improvements<a class="headerlink" href="#reflection-improvements" title="Permanent link">&para;</a></h2>
+<p>Liquid Haskell is a tool to verify Haskell programs. We can write formal
+specifications inside special Haskell comments <code>{-@ ... @-}</code>, and the tool
+will check whether the program behaves as specified. For instance, the following
+specification of the <code>filter</code> function says that we expect all of the elements
+in the result to satisfy the given predicate.</p>
+<pre><code class="language-haskell">{-@ filter :: p:(a -&gt; Bool) -&gt; xs:[a] -&gt; {v:[a] | all p v } @-}
+</code></pre>
+<p>Liquid Haskell would then analyze the implementation of <code>filter</code> to verify that
+it does indeed yield elements that satisfy the predicate.</p>
+<p>To verify such a specification, Liquid Haskell needs to attach a meaning to the
+names in the predicate <code>all p v</code>. It readily learns that <code>p</code> is a parameter
+of <code>filter</code>, and that <code>v</code> is the result. <code>all</code>, however, isn't bound by the specification's parameters, so it refers to whatever is in scope, which is the
+Haskell function from the <code>Prelude</code>.</p>
+<pre><code class="language-haskell">all :: (a -&gt; Bool) -&gt; [a] -&gt; Bool
+</code></pre>
+<p>And Liquid Haskell has a mechanism to provide logic meaning to the implementation
+of a function like <code>all</code>, known as <a href="https://ranjitjhala.github.io/static/refinement_reflection.pdf">reflection</a>. While it has always been convenient to reflect functions in modules analyzed by Liquid Haskell, it was not so easy when there was a
+mix of local and imported definitions from dependencies that are not analysed with
+Liquid Haskell. Last year, there was <a href="https://www.tweag.io/blog/2024-09-12-lh-reflection/">an internship at Tweag</a> to address exactly this
+friction, which resulted in <a href="https://github.com/ucsd-progsys/liquidhaskell/pulls?q=is%3Apr+is%3Aclosed+merged%3A2024-08-31..2025-03-06+author%3Ajarctan">contributions</a> to the
+latest release.</p>
+<h2 id="reasoning-and-reflection-of-lambdas">Reasoning and reflection of lambdas<a class="headerlink" href="#reasoning-and-reflection-of-lambdas" title="Permanent link">&para;</a></h2>
+<p>The reflection mechanism also has other specific limitations at the moment. For instance,
+it doesn't allow reflecting recursive functions defined in <code>let</code> or <code>where</code> bindings. And
+until recently, it didn't allow reflecting functions that contained anonymous functions.
+For example,</p>
+<pre><code class="language-haskell">takePositives = filter (\x -&gt; x &gt; 0)
+</code></pre>
+<p>In the latest release, we have <a href="https://github.com/ucsd-progsys/liquidhaskell/pulls?q=is%3Apr+is%3Aclosed+merged%3A2024-08-31..2025-03-06+author%3AAlecsFerra">several contributions</a> that introduce support for reflecting lambdas and improve the story for reasoning with them.
+This feature is considered experimental at the moment, since we will still have usability and
+performance concerns that deserve further contributions, but one can
+already explore the experience that we could expect in the long run.</p>
+<h2 id="integration-with-ghc">Integration with GHC<a class="headerlink" href="#integration-with-ghc" title="Permanent link">&para;</a></h2>
+<p>In 2020 Liquid Haskell became a compiler plugin for GHC. It was hooked into the
+end of the type checking phase firstly to ensure it only runs on well-typed programs,
+and secondly, to ensure the plugin runs when GHC is only asked to typecheck the
+module but not to generate code, which was helpful to IDEs.</p>
+<p>For a few technical reasons, the plugin was re-parsing and re-typechecking the module
+instead of using the abstract syntax tree (AST) that GHC handed to it as the result of
+type checking. That is no longer the case in the latest release, where the AST after
+type checking is now used for all purposes. In addition, there were <a href="https://github.com/ucsd-progsys/liquidhaskell/pulls?q=is%3Apr+is%3Aclosed+merged%3A2024-08-31..2025-03-06+author%3Agergoerdi">several improvements</a>
+to how the <code>ghc</code> library is used.</p>
+<h2 id="cvc5-support">cvc5 support<a class="headerlink" href="#cvc5-support" title="Permanent link">&para;</a></h2>
+<p>Liquid Haskell offloads part of its reasoning to a family of automated theorem
+provers known as SMT solvers. For most developments, Liquid Haskell has been
+used with the <a href="https://github.com/Z3Prover/z3">Z3</a> SMT solver, and this is what has been used most of the time in
+continuous integration pipelines.</p>
+<p>In theory, any SMT solver can be used with Liquid Haskell, if it provides a standard
+interface known as <a href="https://smt-lib.org">SMT-LIB</a>. In practice, however, experiments are done with
+theories that are not part of the standard. For instance, the reasoning capabilities
+for bags, sets, and maps used to require <code>z3</code>. But now the latest release implements
+<a href="https://github.com/ucsd-progsys/liquidhaskell/pulls?q=is%3Apr+is%3Aclosed+merged%3A2024-08-31..2025-03-06+author%3Aclayrat">support</a> for <a href="https://cvc5.github.io/">cvc5</a> as well.</p>
+<h2 id="name-resolution-overhaul">Name resolution overhaul<a class="headerlink" href="#name-resolution-overhaul" title="Permanent link">&para;</a></h2>
+<p>Name resolution determines, for each name in a program, what is the definition that
+it refers to. Liquid Haskell, in particular, is responsible for resolving names
+that appear in specifications. This task was problematic when the programs
+it was asked to verify spanned many modules.</p>
+<p>There were multiple kinds of names, each with their own name resolution rules,
+and names were resolved in different environments when verifying a module and
+when importing it elsewhere, not always yielding the same results, which often
+produced confusing errors.</p>
+<p>Name resolution, however, was done all over the code base, and any attempt to
+rationalize it would require a few months of effort. I started <a href="https://github.com/ucsd-progsys/liquidhaskell/issues/2169">such an epic</a> last
+September, and managed to <a href="https://www.tweag.io/blog/2025-02-06-refactoring-lh/">conclude it</a> in February.
+These changes made it into the latest release together with an awful lot of
+<a href="https://github.com/ucsd-progsys/liquidhaskell/pulls?page=2&amp;q=is%3Apr+is%3Aclosed+merged%3A2024-08-31..2025-03-06+author%3Afacundominguez">side quests</a> to simplify the existing code.</p>
+<h2 id="the-road-ahead">The road ahead<a class="headerlink" href="#the-road-ahead" title="Permanent link">&para;</a></h2>
+<p>There is no coordinated roadmap for Liquid Haskell. Much of the contributions
+that it receives depend on the opportunity enabled by academic research or
+the needs of particular use cases.</p>
+<p>On my side, I'm trying to improve the adoption of Liquid Haskell. Much of the challenge
+is reducing the amount of common workarounds that the proficient Liquid Haskeller
+needs to employ today. For instance, supporting <a href="https://github.com/ucsd-progsys/liquidhaskell/issues/2480">reflection of functions in local bindings</a>
+would save the user the trouble of rewriting her programs to put the recursive functions
+in the top level.
+Repairing the <a href="https://github.com/ucsd-progsys/liquidhaskell/issues/2450">support for type classes</a> would allow functions to be verified
+even if they use type classes, which is a large subset of Haskell today.
+And without having defined a scope with precision yet, Liquid Haskell still needs to
+improve its user documentation, its error messages, and its tracing and logging.</p>
+<p>The project is chugging along, though. It is making significant leaps in usability. The
+upgrade costs <a href="https://www.tweag.io/blog/2024-05-30-lh-upgrades/#the-hardest-test-failures">have been quantified</a> for a few GHC releases, and
+no longer look like an unbounded risk. The amount of external contributions has
+increased last year, although we still have to see if it is a trend. And there is
+no shortage of interest from academia and industrial interns.</p>
+<p>Thanks to the many contributors for their work and their help during code
+reviews. I look forward to learning what makes it into the coming Liquid Haskell releases!</p>
 
 
 
@@ -1951,12 +1947,12 @@ to a variety of real-world settings.</p>
   <div class="blogpost-meta-whowhen">
     
         <div class="blogpost-meta-author">
-            Niki Vazou
+            Facundo Domínguez
         </div>
     
     
         <div class="blogpost-meta-date">
-            2013-12-09 16:12
+            2025-03-20
         </div>
     
   </div>
@@ -1964,7 +1960,7 @@ to a variety of real-world settings.</p>
   
   <div class="blogpost-meta-tags">
               
-      <a href="../../tags/#tag:termination" class="tag-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5.5 7A1.5 1.5 0 0 1 4 5.5 1.5 1.5 0 0 1 5.5 4 1.5 1.5 0 0 1 7 5.5 1.5 1.5 0 0 1 5.5 7m15.91 4.58-9-9C12.05 2.22 11.55 2 11 2H4c-1.11 0-2 .89-2 2v7c0 .55.22 1.05.59 1.41l8.99 9c.37.36.87.59 1.42.59s1.05-.23 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.56-.23-1.06-.59-1.42"/></svg>termination</a>
+      <a href="../../tags/#tag:announcement" class="tag-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5.5 7A1.5 1.5 0 0 1 4 5.5 1.5 1.5 0 0 1 5.5 4 1.5 1.5 0 0 1 7 5.5 1.5 1.5 0 0 1 5.5 7m15.91 4.58-9-9C12.05 2.22 11.55 2 11 2H4c-1.11 0-2 .89-2 2v7c0 .55.22 1.05.59 1.41l8.99 9c.37.36.87.59 1.42.59s1.05-.23 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.56-.23-1.06-.59-1.42"/></svg>announcement</a>
     
   </div>
   
