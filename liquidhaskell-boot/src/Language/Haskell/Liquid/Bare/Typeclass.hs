@@ -6,6 +6,7 @@
 module Language.Haskell.Liquid.Bare.Typeclass
   ( compileClasses
   , elaborateClassDcp
+  , elaboratedDataConForMeasures
   , makeClassAuxTypes
   -- , makeClassSelectorSigs
   )
@@ -198,16 +199,23 @@ elaborateClassDcp coreToLg simplifier dcp = do
       scSels     = Ghc.classSCSelIds cls
       mkSelPair v = let lhname = makeGHCLHNameFromId v
                     in (lhname, Mb.fromMaybe (scFieldTy v) (M.lookup lhname methMap))
+      -- Create SC dictionary entries with synthetic LHNames (e.g., "$dict$p1VEq" for $p1VEq)
+      -- These represent the implicit dictionary arguments for superclass constraints
+      mkScDictName v = let origSym = getLHNameSymbol (makeGHCLHNameFromId v)
+                           dictSym = F.symbol ("$dict" <> F.symbolText origSym)
+                       in LHNResolved (LHRLocal dictSym) dictSym
+      scDictPairs  = [(mkScDictName v, scFieldTy v) | v <- scSels]
       -- SC selectors are appended LAST so dcWrapSpecType's `reverse` puts them FIRST
       -- (outer binders), making $p1VEq##C:VEq in scope for method field refinements.
       scSelPairs      = map mkSelPair scSels
       allSelPairs     = map mkSelPair methodSels ++ scSelPairs
       secondDcpTyArgs = fmap (\(x, t) -> (x, strengthenTy (lhNameToResolvedSymbol x) t)) allSelPairs
-      -- First DCP: method entries (from plugged DCP) + SC selector entries appended last.
-      -- makePluggedDataCon filtered SC selectors from `xs`; we re-add them here so that
+      -- First DCP: SC dictionary entries + method entries (from plugged DCP) + SC selector entries appended last.
+      -- makePluggedDataCon filtered SC dictionaries from `xs`; we re-add them here so that
+      -- the datacons has the correct number of arguments matching GHC's representation.
       -- dcWrapSpecType (which reverses dcpTyArgs) creates SC binders as outer RFuns,
       -- bringing $p1VEq##C:VEq into scope before method field refinements are checked.
-      firstDcpTyArgs  = zip xs (stripPred <$> ts') ++ scSelPairs
+      firstDcpTyArgs  = scDictPairs ++ zip xs (stripPred <$> ts') ++ scSelPairs
   pure
     ( dcp { dcpTyArgs = firstDcpTyArgs }
     , dcp { dcpTyArgs = secondDcpTyArgs }
@@ -271,6 +279,22 @@ elaborateClassDcp coreToLg simplifier dcp = do
     vv = rTypeValueVar t'
     mt = RT.uReft (vv, F.PAtom F.Eq (F.EVar vv) (F.EApp (F.EVar x) (F.EVar z)))
 
+
+-- | 'elaboratedDataConForMeasures' takes an elaborated class datacons (from 'elaborateClassDcp')
+--   and returns a version suitable for measure generation. It removes the SC dictionary and selector entries
+--   from dcpTyArgs, keeping only the method entries.
+--   This is needed because while LIQUID represents datacons with SC dictionaries, the GHC datacons
+--   only has methods. So we extract only the methods for measure selector generation.
+elaboratedDataConForMeasures :: Ghc.Class -> Located DataConP -> Located DataConP
+elaboratedDataConForMeasures cls ldcp = F.atLoc ldcp $ filterScSelectors (F.val ldcp)
+ where
+  filterScSelectors dcp = dcp { dcpTyArgs = methodArgs }
+  -- dcpTyArgs has structure: [scDictArgs...] ++ [methodArgs...] ++ [scSelectorArgs...]
+  -- We want to keep only: [methodArgs...]
+  -- SC dictionaries are at the beginning, SC selectors are at the end
+  methodArgs = drop numScSels (take (length orig - numScSels) orig)
+  orig = dcpTyArgs (F.val ldcp)
+  numScSels = length (Ghc.classSCSelIds cls)
 
 elaborateMethod :: F.Symbol -> S.HashSet F.Symbol -> SpecType -> SpecType
 elaborateMethod dc methods st = mapExprReft

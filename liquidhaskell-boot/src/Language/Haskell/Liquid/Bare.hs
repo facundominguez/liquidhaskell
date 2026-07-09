@@ -1391,7 +1391,9 @@ makeTycEnv0 cfg myName env embs mySpec iSpecs = (diag0 <> diag1, datacons, Bare.
     tds           = [(name, tcpCon tcp, dd) | (name, tcp, Just dd) <- tcDds]
     (diag1, adts) = Bare.makeDataDecls embs myName tds       datacons
     dm            = Bare.dataConMap adts
-    dcSelectors   = concatMap (Bare.makeMeasureSelectors cfg dm) (if reflection cfg then charDataCon:datacons else datacons)
+    -- Exclude class datacons from measure generation here; they will be handled in makeTycEnv1 after elaborateClassDcp
+    nonClassDatacons = filter (not . Ghc.isClassTyCon . Ghc.dataConTyCon . dcpCon . F.val) datacons
+    dcSelectors   = concatMap (Bare.makeMeasureSelectors cfg dm) (if reflection cfg then charDataCon:nonClassDatacons else nonClassDatacons)
     fiTcs         = _gsFiTcs (Bare.reSrc env)
 
 
@@ -1406,12 +1408,22 @@ makeTycEnv1 env (tycEnv, datacons) coreToLg simplifier = do
   -- fst for selector generation, snd for dataconsig generation
   lclassdcs <- forM classdcs $ traverse (Bare.elaborateClassDcp coreToLg simplifier)
   let recSelectors = Bare.makeRecordSelectorSigs env (dcs ++ (fmap . fmap) snd lclassdcs)
+  -- Generate measures for the elaborated class datacons, but first remove SC selectors from dcpTyArgs
+  -- This is needed because SC selectors are not data constructor fields but helper functions
+  let elaboratedClassdcs = fmap (fmap fst) lclassdcs
+  let measuredClassdcs = zipWith mkMeasuredDcp elaboratedClassdcs (map (Ghc.tyConClass_maybe . Ghc.dataConTyCon . dcpCon . F.val) classdcs)
+  let classSelectors = concatMap (Bare.makeMeasureSelectors cfg dm) measuredClassdcs
+  let allSelectors = Bare.tcSelMeasures tycEnv ++ classSelectors
   pure $
-    tycEnv {Bare.tcSelVars = recSelectors, Bare.tcDataCons = F.val <$> ((fmap . fmap) fst lclassdcs ++ dcs )}
+    tycEnv {Bare.tcSelVars = recSelectors, Bare.tcDataCons = F.val <$> (elaboratedClassdcs ++ dcs), Bare.tcSelMeasures = allSelectors }
   where
+    cfg           = getConfig env
+    dm            = Bare.tcDataConMap tycEnv
     (classdcs, dcs) =
       L.partition
         (Ghc.isClassTyCon . Ghc.dataConTyCon . dcpCon . F.val) datacons
+    mkMeasuredDcp ldcp (Just cls) = Bare.elaboratedDataConForMeasures cls ldcp
+    mkMeasuredDcp ldcp Nothing     = ldcp -- Should not happen for class datacons
 
 -- REBARE: formerly, makeGhcCHOP2
 -------------------------------------------------------------------------------------------
