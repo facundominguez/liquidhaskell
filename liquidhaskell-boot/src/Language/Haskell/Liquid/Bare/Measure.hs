@@ -261,7 +261,7 @@ makeMeasureSelectors cfg dm (Loc l l' c)
   where
     dc         = dcpCon    c
     isGadt     = dcpIsGadt c
-    xts        = dcpTyArgs c
+    xts        = F.tracepp ("xts: " ++ show (dcpCon c)) $ dcpTyArgs c
     autofields = not isGadt
     go ((x, t), i)
       -- do not make selectors for functional fields
@@ -327,7 +327,9 @@ bareBool = RApp (RTyCon Ghc.boolTyCon [] defaultTyConInfo) [] [] mempty
 -}
 
 makeMeasureSelector :: (Show a1) => Located LHName -> SpecType -> Ghc.DataCon -> Int -> a1 -> Measure SpecType Ghc.DataCon
-makeMeasureSelector x s dc n i = M { msName = x, msSort = s, msEqns = [eqn], msKind = MsSelector, msUnSorted = mempty}
+makeMeasureSelector x s dc n i =
+   F.tracepp "makeMeasureSelector" $
+    M { msName = x, msSort = s, msEqns = [eqn], msKind = MsSelector, msUnSorted = mempty}
   where
     eqn                        = Def x dc Nothing args (E (F.EVar $ mkx i))
     args                       = (, Nothing) . mkx <$> [1 .. n]

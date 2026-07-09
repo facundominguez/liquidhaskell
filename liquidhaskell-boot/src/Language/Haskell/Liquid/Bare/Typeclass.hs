@@ -45,6 +45,7 @@ import qualified Language.Haskell.Liquid.Bare.Resolve
 import qualified Language.Haskell.Liquid.Measure
                                                as Ms
 import qualified Data.HashMap.Strict           as M
+import Debug.Trace
 
 
 
@@ -216,7 +217,7 @@ elaborateClassDcp coreToLg simplifier dcp = do
       -- dcWrapSpecType (which reverses dcpTyArgs) creates SC binders as outer RFuns,
       -- bringing $p1VEq##C:VEq into scope before method field refinements are checked.
       firstDcpTyArgs  = scDictPairs ++ zip xs (stripPred <$> ts') ++ scSelPairs
-  pure
+  pure $ trace ("elaborateClassDcp: " ++ F.showpp (F.symbol dc) ++ " " ++ F.showpp firstDcpTyArgs ++ " " ++ F.showpp secondDcpTyArgs)
     ( dcp { dcpTyArgs = firstDcpTyArgs }
     , dcp { dcpTyArgs = secondDcpTyArgs }
     )
