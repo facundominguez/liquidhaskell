@@ -443,6 +443,29 @@ makeClassAuxTypesOne elab _auxEnv (ldcp, inst, methods) = do
     subst [] t = t
     subst ((a, ta):su) t = RT.subsTyVarMeet' (a, ta) (subst su t)
 
+    methodsToSpec :: [Ghc.Var]
+    methodsToSpec = filter ((`S.member` classOpKeys) . mkSymbol) methods
+
+    classOpKeys :: S.HashSet F.Symbol
+    classOpKeys =
+      S.fromList
+        [ GM.dropModuleNames (F.symbol v)
+        | (v, _) <- Ghc.classOpItems (Ghc.is_cls inst)
+        ]
+
+    scAuxs :: [Ghc.Var]
+    scAuxs = filter ((`S.member` scSelKeys) . mkSymbol) methods
+
+    scSelKeys :: S.HashSet F.Symbol
+    scSelKeys =
+      S.fromList
+        [ GM.dropModuleNames (F.symbol v)
+        | v <- Ghc.classSCSelIds (Ghc.is_cls inst)
+        ]
+
+    scAuxSpec :: Ghc.Var -> SpecType
+    scAuxSpec v = classRFInfoType True (RT.ofType (Ghc.varType v) :: SpecType)
+
 substAuxMethod :: F.Symbol -> M.HashMap F.Symbol F.Symbol -> F.Expr -> F.Expr
 substAuxMethod dfun methods = F.notracepp "substAuxMethod" . go
   where go :: F.Expr -> F.Expr
@@ -468,28 +491,6 @@ substAuxMethod dfun methods = F.notracepp "substAuxMethod" . go
         go (F.PIff e0 e1) = F.PIff (go e0) (go e1)
         go (F.PAtom brel e0 e1) = F.PAtom brel (go e0) (go e1)
         go e = F.notracepp "LEAF" e
-    methodsToSpec :: [Ghc.Var]
-    methodsToSpec = filter ((`S.member` classOpKeys) . mkSymbol) methods
-
-    classOpKeys :: S.HashSet F.Symbol
-    classOpKeys =
-      S.fromList
-        [ GM.dropModuleNames (F.symbol v)
-        | (v, _) <- Ghc.classOpItems (Ghc.is_cls inst)
-        ]
-
-    scAuxs :: [Ghc.Var]
-    scAuxs = filter ((`S.member` scSelKeys) . mkSymbol) methods
-
-    scSelKeys :: S.HashSet F.Symbol
-    scSelKeys =
-      S.fromList
-        [ GM.dropModuleNames (F.symbol v)
-        | v <- Ghc.classSCSelIds (Ghc.is_cls inst)
-        ]
-
-    scAuxSpec :: Ghc.Var -> SpecType
-    scAuxSpec v = classRFInfoType True (RT.ofType (Ghc.varType v) :: SpecType)
 
 mkSymbol :: Ghc.Var -> F.Symbol
 mkSymbol x =
