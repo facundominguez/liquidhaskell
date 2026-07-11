@@ -397,7 +397,7 @@ makeClassAuxTypesOne elab auxEnv (ldcp, inst, methods) = do
           headlessSig
     elaboratedSig  <- flip addCoherenceOblig preft <$> elab fullSig
 
-    let retSig =  mapExprReft (\_ -> substAuxMethod dfunSym methodsSet) (F.notracepp ("elaborated" ++ GM.showPpr method) elaboratedSig)
+    let retSig = mapExprReft (\_ -> substAuxMethods auxEnv) (F.notracepp ("elaborated" ++ GM.showPpr method) elaboratedSig)
     let tysub  = F.notracepp "tysub" $ M.fromList $ zip (F.notracepp "newtype-vars" $ RT.allTyVars' (F.notracepp "new-type" retSig)) (F.notracepp "ghc-type-vars" (RT.allTyVars' ((F.notracepp "ghc-type" $ RT.ofType (Ghc.varType method)) :: SpecType)))
         cosub  = M.fromList [ (F.symbol a, F.fObj (GM.namedLocSymbol b)) |  (a,RTV b) <- M.toList tysub]
         tysubf x = F.notracepp ("cosub:" ++ F.showpp cosub) $ M.lookupDefault x x tysub
@@ -439,31 +439,6 @@ makeClassAuxTypesOne elab auxEnv (ldcp, inst, methods) = do
     subst [] t = t
     subst ((a, ta):su) t = RT.subsTyVarMeet' (a, ta) (subst su t)
 
-substAuxMethod :: F.Symbol -> M.HashMap F.Symbol F.Symbol -> F.Expr -> F.Expr
-substAuxMethod dfun methods = F.notracepp "substAuxMethod" . go
-  where go :: F.Expr -> F.Expr
-        go (F.EApp e0 e1)
-          | F.EVar x <- F.notracepp "e0" e0
-          , (F.EVar dfun_mb, args)  <- F.splitEApp e1
-          , dfun_mb == dfun
-          , Just method <- M.lookup x methods
-              -- Before: Functor.fmap ($p1Applicative $dFunctor)
-              -- After: Funcctor.fmap ($p1Applicative##GHC.Base.Applicative)
-           = F.eApps (F.EVar method) args
-          | otherwise
-          = F.EApp (go e0) (go e1)
-        go (F.ENeg e) = F.ENeg (go e)
-        go (F.EBin bop e0 e1) = F.EBin bop (go e0) (go e1)
-        go (F.EIte e0 e1 e2) = F.EIte (go e0) (go e1) (go e2)
-        go (F.ECst e0 s) = F.ECst (go e0) s
-        go (F.ELam (x, t) body) = F.ELam (x, t) (go body)
-        go (F.PAnd es) = F.PAnd (go <$> es)
-        go (F.POr es) = F.POr (go <$> es)
-        go (F.PNot e) = F.PNot (go e)
-        go (F.PImp e0 e1) = F.PImp (go e0) (go e1)
-        go (F.PIff e0 e1) = F.PIff (go e0) (go e1)
-        go (F.PAtom brel e0 e1) = F.PAtom brel (go e0) (go e1)
-        go e = F.notracepp "LEAF" e
     methodsToSpec :: [Ghc.Var]
     methodsToSpec = filter ((`S.member` classOpKeys) . mkSymbol) methods
 
@@ -486,6 +461,31 @@ substAuxMethod dfun methods = F.notracepp "substAuxMethod" . go
 
     scAuxSpec :: Ghc.Var -> SpecType
     scAuxSpec v = classRFInfoType True (RT.ofType (Ghc.varType v) :: SpecType)
+
+substAuxMethods
+  :: M.HashMap F.Symbol (M.HashMap F.Symbol F.Symbol)
+  -> F.Expr
+  -> F.Expr
+substAuxMethods auxEnv = go
+  where
+    go (F.EApp e0 e1)
+      | F.EVar clsOp <- e0
+      , (F.EVar dfun, args) <- F.splitEApp e1
+      , Just methodMap <- M.lookup dfun auxEnv
+      , Just aux <- M.lookup clsOp methodMap = F.eApps (F.EVar aux) args
+      | otherwise = F.EApp (go e0) (go e1)
+    go (F.ENeg e) = F.ENeg (go e)
+    go (F.EBin bop e0 e1) = F.EBin bop (go e0) (go e1)
+    go (F.EIte e0 e1 e2) = F.EIte (go e0) (go e1) (go e2)
+    go (F.ECst e s) = F.ECst (go e) s
+    go (F.ELam (x, t) body) = F.ELam (x, t) (go body)
+    go (F.PAnd es) = F.PAnd (go <$> es)
+    go (F.POr es) = F.POr (go <$> es)
+    go (F.PNot e) = F.PNot (go e)
+    go (F.PImp e0 e1) = F.PImp (go e0) (go e1)
+    go (F.PIff e0 e1) = F.PIff (go e0) (go e1)
+    go (F.PAtom brel e0 e1) = F.PAtom brel (go e0) (go e1)
+    go e = e
 
 mkSymbol :: Ghc.Var -> F.Symbol
 mkSymbol x =
