@@ -173,7 +173,7 @@ splitType t  = (αs, map irrelevantMult ts, tr)
 stitchArgs :: (Monoid t1, PPrint a)
            => Bool
            -> SrcSpan
-           -> a
+           -> DataCon
            -> [(Symbol, Maybe (RRType Reft))]
            -> [Type]
            -> [(Symbol, RFInfo, RRType Reft, t1)]
@@ -182,7 +182,21 @@ stitchArgs allowTC sp dc allXs allTs
                       ++ zipWith g xs (ofType <$> ts)
   | otherwise          = panicFieldNumMismatch sp dc nXs nTs
     where
-      (pts, ts)        = L.partition (\t -> notracepp ("isPredTy: " ++ showpp t) $ (if allowTC then Ghc.isClassPred else Ghc.isSimplePredTy ) t) allTs
+      isDictDC         = Ghc.isClassTyCon (dataConTyCon dc)
+      (pts, ts)        =
+          L.partition
+            (\t -> notracepp ("isPredTy: " ++ showpp t) $
+              (if allowTC then
+                 if isDictDC then
+                   Ghc.isEqPred
+                 else
+                   Ghc.isClassPred
+               else
+                 Ghc.isSimplePredTy
+              )
+              t
+            )
+            allTs
       (_  , xs)        = L.partition (coArg . snd) allXs
       nXs              = length xs
       nTs              = length ts
