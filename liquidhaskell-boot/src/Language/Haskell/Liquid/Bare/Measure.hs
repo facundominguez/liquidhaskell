@@ -62,6 +62,8 @@ import Control.Monad (mapM)
 import qualified Data.List as L
 
 import GHC.Base (Int(I#))
+import qualified GHC.Core.DataCon as Ghc (dataConOtherTheta)
+import GHC.Stack (HasCallStack)
 
 --------------------------------------------------------------------------------
 makeHaskellMeasures :: Config -> GhcSrc -> Bare.TycEnv -> LogicMap -> Ms.BareSpec
@@ -329,23 +331,29 @@ bareBool = RApp (RTyCon Ghc.boolTyCon [] defaultTyConInfo) [] [] mempty
 makeMeasureSelector :: (Show a1) => Located LHName -> SpecType -> Ghc.DataCon -> Int -> a1 -> Measure SpecType Ghc.DataCon
 makeMeasureSelector x s dc n i = M { msName = x, msSort = s, msEqns = [eqn], msKind = MsSelector, msUnSorted = mempty}
   where
+    -- extract the count of dictionary arguments in the type of the data constructor
+    dictCount                  = length (Ghc.dataConOtherTheta dc)
     eqn                        = Def x dc Nothing args (E (F.EVar $ mkx i))
-    args                       = (, Nothing) . mkx <$> [1 .. n]
+    args                       = [(mkxd j, Nothing) | j <- [1 .. dictCount]] ++ [(mkx j, Nothing) | j <- [1 .. n]]
     mkx j                      = F.symbol ("xx" ++ show j)
+    mkxd j                     = F.symbol ("xxd" ++ show j)
 
 makeMeasureChecker :: Located LHName -> SpecType -> Ghc.DataCon -> Int -> Measure SpecType Ghc.DataCon
-makeMeasureChecker x s0 dc n = M { msName = x, msSort = s, msEqns = eqn : (eqns <$> filter (/= dc) dcs), msKind = MsChecker, msUnSorted = mempty }
+makeMeasureChecker x s0 dc _n = M { msName = x, msSort = s, msEqns = eqn : (eqns <$> filter (/= dc) dcs), msKind = MsChecker, msUnSorted = mempty }
   where
     s       = F.notracepp ("makeMeasureChecker: " ++ show x) s0
-    eqn     = Def x dc Nothing ((, Nothing) . mkx <$> [1 .. n])       (P F.PTrue)
-    eqns d  = Def x d  Nothing ((, Nothing) . mkx <$> [1 .. nArgs d]) (P F.PFalse)
+    eqn     = Def x dc Nothing (args dc) (P F.PTrue)
+    eqns d  = Def x d  Nothing (args d) (P F.PFalse)
     nArgs d = length (Ghc.dataConOrigArgTys d)
     mkx j   = F.symbol ("xx" ++ show j)
     dcs     = Ghc.tyConDataCons (Ghc.dataConTyCon dc)
+    args d  = [(mkxd j, Nothing) | j <- [1 .. dictCount d]] ++ [(mkx j, Nothing) | j <- [1 .. nArgs d]]
+    dictCount d = length (Ghc.dataConOtherTheta d)
+    mkxd j = F.symbol ("xxd" ++ show j)
 
 
 ----------------------------------------------------------------------------------------------
-makeMeasureSpec' :: Bool -> MSpec SpecType Ghc.DataCon -> ([(Ghc.Var, SpecType)], [(Located LHName, RRType F.Reft)])
+makeMeasureSpec' :: HasCallStack => Bool -> MSpec SpecType Ghc.DataCon -> ([(Ghc.Var, SpecType)], [(Located LHName, RRType F.Reft)])
 ----------------------------------------------------------------------------------------------
 makeMeasureSpec' allowTC mspec0 = (ctorTys, measTys)
   where
