@@ -1,5 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-@ LIQUID "--typeclass" @-}
+{-@ LIQUID "--save" @-}
+{-@ LIQUID "--reflection" @-}
 {-@ LIQUID "--aux-inline" @-}
 {-@ LIQUID "--ple" @-}
 

@@ -2,6 +2,8 @@
 {-@ LIQUID "--typeclass" @-}
 {-@ LIQUID "--aux-inline" @-}
 {-@ LIQUID "--ple" @-}
+{-@ LIQUID "--reflection" @-}
+{-@ LIQUID "--save" @-}
 
 module PNat where
 

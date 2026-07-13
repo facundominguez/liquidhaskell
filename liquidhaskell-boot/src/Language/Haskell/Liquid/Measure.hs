@@ -170,7 +170,7 @@ splitType t  = (αs, map irrelevantMult ts, tr)
     (αs, tb) = splitForAllTyCoVars t
     (ts, tr) = splitFunTys tb
 
-stitchArgs :: (Monoid t1, PPrint a)
+stitchArgs :: Monoid t1
            => Bool
            -> SrcSpan
            -> DataCon
