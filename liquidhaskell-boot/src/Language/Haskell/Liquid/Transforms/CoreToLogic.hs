@@ -38,7 +38,6 @@ import           Data.Text.Encoding
 import           Data.Text.Encoding.Error
 import           Control.Monad.Except
 import           Control.Monad.Identity
-import           Control.Applicative                   ((<|>))
 import qualified Language.Haskell.Liquid.Misc          as Misc
 import           Language.Fixpoint.Types               hiding (panic, Error, R, simplify, isBool)
 import qualified Language.Fixpoint.Types               as F
@@ -405,7 +404,7 @@ toPredApp p = do
   where
     opSym = tomaybesymbol
     go (Just f, [e1, e2])
-      | Just rel <- M.lookup f brels <|> M.lookup (GM.dropModuleNamesAndUnique f) normalizedBrels
+      | Just rel <- M.lookup f brels
       = PAtom rel <$> coreToLg e1 <*> coreToLg e2
     go (Just f, [e])
       | f == symbol (show 'not)
@@ -489,9 +488,6 @@ brels = M.fromList [ (symbol (show '(==)), Eq)
                    , (symbol (show '(<=)), Le)
                    , (symbol (show '(<)) , Lt)
                    ]
-
-normalizedBrels :: M.HashMap Symbol Brel
-normalizedBrels = M.mapKeys GM.dropModuleNamesAndUnique brels
 
 -- bops is a map between GHC function names/symbols and binary operators
 -- from the logic. We want GHC functions like +, -, etc. to map to the
