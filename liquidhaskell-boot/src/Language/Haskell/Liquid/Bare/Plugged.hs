@@ -98,6 +98,7 @@ makePluggedDataCon allowTC embs tyi ldcp
   | mismatchTyVars    = Ex.throw (err "type variables")
   | otherwise         = F.atLoc ldcp $ F.notracepp "makePluggedDataCon" $ dcp
                           { dcpFreeTyVars = dcVars
+                          , dcpTyConstrs  = constrs
                           , dcpTyArgs     = reverse tArgs
                           , dcpTyRes      = tRes
                           }
@@ -106,6 +107,8 @@ makePluggedDataCon allowTC embs tyi ldcp
     (das, theta, originDts, dt) = {- F.notracepp ("makePluggedDC: " ++ F.showpp dc) $ -} Ghc.dataConSig dc
     consClassArgs     = if allowTC then filter (not . GM.isEmbeddedDictType) theta else []
     dts               = consClassArgs ++ originDts
+    isClassDc         = Ghc.isClassTyCon (Ghc.dataConTyCon dc)
+    constrs           = if allowTC && isClassDc then [] else dcpTyConstrs dcp
 
     dcArgs            = reverse $ filter (not . (if allowTC then isEmbeddedClass else isClassType) . snd) (dcpTyArgs dcp)
     dcVars            = if isGADT
