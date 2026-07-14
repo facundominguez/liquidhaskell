@@ -594,6 +594,8 @@ fixExprToHsExpr env (F.PIff e0 e1) = mkHsApp
   (fixExprToHsExpr env e1)
 fixExprToHsExpr env (F.PNot e) =
   mkHsApp (nlHsVar not_RDR) (fixExprToHsExpr env e)
+fixExprToHsExpr env (F.PAtom F.Ne e0 e1) =
+  fixExprToHsExpr env (F.PNot (F.PAtom F.Eq e0 e1))
 fixExprToHsExpr env (F.PAtom brel e0 e1) = mkHsApp
   (mkHsApp (brelToHsExpr brel) (fixExprToHsExpr env e0))
   (fixExprToHsExpr env e1)
@@ -629,12 +631,12 @@ bopToHsExpr bop = noLocA (HsVar Ghc.noExtField (noLocA (f bop)))
 brelToHsExpr :: F.Brel -> LHsExpr GhcPs
 brelToHsExpr brel = noLocA (HsVar Ghc.noExtField (noLocA (f brel)))
  where
-  f F.Eq = mkVarUnqual (mkFastString "==")
+  f F.Eq = nameRdrName Ghc.eqName
   f F.Gt = gt_RDR
   f F.Lt = lt_RDR
   f F.Ge = ge_RDR
   f F.Le = le_RDR
-  f F.Ne = mkVarUnqual (mkFastString "/=")
+  f F.Ne = impossible Nothing "brelToExpr: rewrite Ne as Not (Eq ... )"
   f _    = impossible Nothing "brelToExpr: Unsupported operation"
 
 symbolToRdrNameNs :: NameSpace -> F.Symbol -> RdrName

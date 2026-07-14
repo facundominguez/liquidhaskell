@@ -166,6 +166,7 @@ import GHC.Builtin.Names              as Ghc
     , Unique
     , and_RDR
     , bindMName
+    , eqName
     , eqClassKey
     , eqClassName
     , ge_RDR
