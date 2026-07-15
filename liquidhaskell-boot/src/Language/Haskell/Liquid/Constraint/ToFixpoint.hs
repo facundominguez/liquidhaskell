@@ -272,7 +272,9 @@ makeSimplify (var, t)
       Ghc.DataConWorkId dc ->
         let nCoerce = length $ filter (Ghc.isSimplePredTy . Ghc.irrelevantMult)
                               $ Ghc.dataConRepArgTys dc
-        in  drop nCoerce (ty_binds trep)
+        in if Ghc.isClassTyCon (Ghc.dataConTyCon dc)
+            then ty_binds trep
+            else drop nCoerce (ty_binds trep)
       _                    -> ty_binds trep
     eVal  = F.eApps (F.EVar dcSym) (F.EVar <$> valBs)
 
