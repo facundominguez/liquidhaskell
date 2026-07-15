@@ -2687,10 +2687,10 @@ executable typeclass-pos
     if !flag(typeclass-pos) && flag(stack)
       buildable:      False
 
-    -- Fails on GHC 9.0.1
-    if impl(ghc < 9)
-      other-modules:
+    other-modules:
                       All
+                    , Basic
+                    , BasicImport
                     , Lib
                     , Lemma
                     , PNat
