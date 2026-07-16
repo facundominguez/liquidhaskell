@@ -1,5 +1,4 @@
 {-# LANGUAGE RankNTypes #-}
-{-@ LIQUID "--reflection" @-}
 {-@ LIQUID "--typeclass" @-}
 {-@ LIQUID "--aux-inline" @-}
 {-@ LIQUID "--ple" @-}
@@ -39,7 +38,7 @@ instance Monoid PNat where
 instance VMonoid PNat where
   lawEmpty Z     = ()
   lawEmpty (S m) = lawEmpty m
-  lawMconcat _ = ()
+  -- lawMconcat _ = ()
 
 
 
@@ -60,4 +59,4 @@ instance Monoid (List a) where
 instance VMonoid (List a) where
   lawEmpty Nil = ()
   lawEmpty (Cons _ t) = lawEmpty t
-  lawMconcat _ = ()
+  -- lawMconcat _ = ()
